@@ -1,8 +1,10 @@
 // frontend/src/hooks/useCamera.js
 // Manages TWO cameras simultaneously.
-// Exposes a captureFrame() that stitches both feeds side-by-side into one image.
+// Exposes a captureFrame() that returns raw frames and
+// captureStitched(calib) that returns a single calibrated JPEG.
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import { buildStitch, canvasToDataURL } from "../utils/stitch";
 
 
 export function useCamera() {
@@ -48,8 +50,8 @@ const openStream = useCallback(async (deviceId) => {
   const constraints = {
     video: {
       deviceId: { exact: deviceId },
-      width: { ideal: 1920 },
-      height: { ideal: 1108 },
+      width: { ideal: 960 },
+      height: { ideal: 1080 },
     },
   };
   
@@ -135,80 +137,69 @@ const openStream = useCallback(async (deviceId) => {
     }, [cam0Id, cam1Id, openStream]);
 
   // ── Lock camera settings ──────────────────────────────────────────────────
-  // Switches exposure, white balance and focus to manual mode WITHOUT
-  // specifying a target value — the camera stays at wherever it currently is
-  // and stops auto-adjusting when the scene changes.
+  // Freezes each camera at its current exposure, white balance, and focus so
+  // removing the medicine boxes from the scene doesn't trigger re-adjustment.
   //
-  // We wait 2 seconds first so the auto-exposure has fully settled on the
-  // medicine boxes before we freeze it — locking mid-adjustment caused
-  // overexposure in the previous version.
+  // Exposure / white balance: switch to 'manual' WITHOUT a target value.
+  //   The camera holds whatever the auto algorithm settled on.  Specifying an
+  //   explicit exposureTime caused a white-screen on the other camera because
+  //   different USB firmware use different internal unit scales.
+  //
+  // Focus: switch to 'manual' AND supply the current focusDistance from the
+  //   same track.  Without a value the browser enters "manual" mode but some
+  //   cameras still hunt when the scene changes drastically (medicine removed).
+  //   Reading from the same track is safe — no cross-camera unit mismatch.
+  //
+  // We wait 2 s first so auto-exposure has fully settled on the medicine boxes.
   const lockCameras = useCallback(async () => {
-    // Wait for auto-exposure to fully settle before locking
+    // Wait for auto-exposure to fully settle on the current scene before locking.
     console.log(`[Camera] Waiting for exposure to settle...`);
     await new Promise(r => setTimeout(r, 2000));
 
     const streams = [stream0Ref.current, stream1Ref.current].filter(Boolean);
 
-    // ── Step 1: Read cam2's (stream1) settled values to use as the reference ──
-    // stream1Ref = cam2 (the sharper/right camera). We use its exposure and
-    // white balance as the target for both cameras so they match visually.
-    let refExposure = null;
-    let refWb       = null;
-
-    const refTrack = stream1Ref.current?.getVideoTracks()[0];
-    if (refTrack) {
-      const refSettings = refTrack.getSettings();
-      refExposure = refSettings.exposureTime    ?? null;
-      refWb       = refSettings.colorTemperature ?? null;
-      console.log(`[Camera] Reference (cam2) — exposure: ${refExposure}, wb: ${refWb}K`);
-    }
-
-    // ── Step 2: Apply cam2's values to both cameras ───────────────────────────
     for (const stream of streams) {
       const track = stream.getVideoTracks()[0];
       if (!track) continue;
 
       const capabilities = track.getCapabilities();
+      const settings     = track.getSettings();   // read current values from THIS track
       const advanced     = [];
 
-      if (capabilities.exposureMode?.includes('manual')) {
-        const entry = { exposureMode: 'manual' };
-        // Apply cam2's exposure value if within this camera's supported range
-        if (refExposure !== null && capabilities.exposureTime) {
-          const clamped = Math.min(
-            Math.max(refExposure, capabilities.exposureTime.min),
-            capabilities.exposureTime.max
-          );
-          entry.exposureTime = clamped;
-        }
-        advanced.push(entry);
-        console.log(`[Camera] Locking exposure mode to manual`);
-      }
+      
+      if (capabilities.exposureMode?.includes('manual'))
+        advanced.push({ exposureMode: 'manual'});
 
-      if (capabilities.whiteBalanceMode?.includes('manual')) {
-        const entry = { whiteBalanceMode: 'manual' };
-        // Apply cam2's white balance value if within supported range
-        if (refWb !== null && capabilities.colorTemperature) {
-          const clamped = Math.min(
-            Math.max(refWb, capabilities.colorTemperature.min),
-            capabilities.colorTemperature.max
-          );
-          entry.colorTemperature = clamped;
-        }
-        advanced.push(entry);
-        console.log(`[Camera] Locking white balance mode to manual`);
-      }
+      // White balance: same reasoning — mode-only is safe.
+      if (capabilities.whiteBalanceMode?.includes('manual'))
+        advanced.push({ whiteBalanceMode: 'manual' });
 
+      // Lock focus with the current focal distance.
       if (capabilities.focusMode?.includes('manual')) {
-        advanced.push({ focusMode: 'manual' });
-        console.log(`[Camera] Locking focus mode to manual`);
+        const entry = { focusMode: 'manual' };
+        if (settings.focusDistance !== undefined) entry.focusDistance = settings.focusDistance;
+        advanced.push(entry);
+      }
+
+      // Lock gain if the camera exposes it (prevents auto-gain compensating after
+      // exposure is pinned, which can still cause brightness shifts on some drivers).
+      if (capabilities.gain !== undefined && settings.gain !== undefined) {
+        advanced.push({ gain: settings.gain });
+      }
+
+      // Lock brightness if exposed as a controllable property.
+      if (capabilities.brightness !== undefined && settings.brightness !== undefined) {
+        advanced.push({ brightness: settings.brightness });
       }
 
       if (advanced.length > 0) {
         try {
           await track.applyConstraints({ advanced });
           const s = track.getSettings();
-          console.log(`[Camera] Locked at — exposure: ${s.exposureTime}, wb: ${s.colorTemperature}K, focus: ${s.focusDistance}`);
+          console.log(
+            `[Camera] Locked — exposure: ${s.exposureTime}, wb: ${s.colorTemperature}K, ` +
+            `focus: ${s.focusDistance}, gain: ${s.gain}, brightness: ${s.brightness}`
+          );
         } catch (err) {
           console.warn(`[Camera] Lock failed:`, err.message);
         }
@@ -262,7 +253,17 @@ const openStream = useCallback(async (deviceId) => {
   }, []);
 
 
-// ── Capture — return an array of individual frames ─────────────
+  // ── captureStitched — rotate + crop + offset + stitch → single JPEG ──────────
+  const captureStitched = useCallback((calib, correction = null) => {
+    const v0 = video0Ref.current;
+    const v1 = video1Ref.current;
+    if (!v0 || !ready) return null;
+    const stitched = buildStitch(v0, v1, calib ?? {}, {}, correction);
+    if (!stitched) return null;
+    return canvasToDataURL(stitched, 0.92);
+  }, [ready]);
+
+  // ── Capture — return an array of individual frames ─────────────
   const captureFrame = useCallback(() => {
     const v0 = video0Ref.current;
     const v1 = video1Ref.current;
@@ -323,7 +324,7 @@ const openStream = useCallback(async (deviceId) => {
   return {
     video0Ref, video1Ref,
     ready, error,
-    captureFrame,
+    captureFrame, captureStitched,
     deviceIds, cam0Id, setCam0Id, cam1Id, setCam1Id,
     locked, lockCameras, unlockCameras,
   };

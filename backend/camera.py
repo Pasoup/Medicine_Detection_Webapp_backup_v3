@@ -62,15 +62,12 @@ def _open_master(index: int, width: int, height: int):
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
-    # Attempt to fix exposure — read back actual values to see what the driver
-    # accepted.  On cameras where AUTO_EXPOSURE returns -1.0 (unsupported) the
-    # camera stays in auto mode and the explicit exposure value is ignored.
-    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)   # 1 = manual on most DirectShow drivers
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  
     cap.set(cv2.CAP_PROP_EXPOSURE, -4)
+    
     ae_actual = cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)
     ex_actual = cap.get(cv2.CAP_PROP_EXPOSURE)
 
-    # Read the gain and brightness the driver settled on — slave will copy these
     gain       = cap.get(cv2.CAP_PROP_GAIN)
     brightness = cap.get(cv2.CAP_PROP_BRIGHTNESS)
 
