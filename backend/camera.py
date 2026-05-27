@@ -42,7 +42,8 @@ _latest_raw:  tuple | None         = None   # (f0, f1) raw frames for scan
 
 _cap0: cv2.VideoCapture | None = None
 _cap1: cv2.VideoCapture | None = None
-_running = False
+_running  = False
+_f0_beta: int = 0   # additive brightness offset applied to cam0 frames to match cam1
 
 # ── Camera open ───────────────────────────────────────────────────────────────
 def _open_master(index: int, width: int, height: int):
@@ -62,8 +63,8 @@ def _open_master(index: int, width: int, height: int):
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
-    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  
-    cap.set(cv2.CAP_PROP_EXPOSURE, -4)
+    
+    cap.set(cv2.CAP_PROP_EXPOSURE, -5)
     
     ae_actual = cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)
     ex_actual = cap.get(cv2.CAP_PROP_EXPOSURE)
@@ -73,7 +74,7 @@ def _open_master(index: int, width: int, height: int):
 
     print(f"[Camera] Master (index {index}) — "
           f"{int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}×{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
-    print(f"[Camera] Master — auto_exposure set={6} actual={ae_actual} | "
+    print(f"[Camera] Master — auto_exposure set={-5} actual={ae_actual} | "
           f"exposure set={-4} actual={ex_actual} | "
           f"gain={gain} | brightness={brightness}")
 
@@ -94,13 +95,20 @@ def _open_slave(index: int, width: int, height: int, master_vals: dict):
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
+
+    cap.set(cv2.CAP_PROP_EXPOSURE, -5)
+    
     actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Do NOT force manual exposure — cam2's driver interprets explicit exposure
-    # values as fully-manual and goes all-black.  Since auto_exposure is also
-    # unresponsive on these cameras (returns -1.0), both cameras auto-expose
-    # naturally; this is the safest state to leave the slave in.
+    # Do NOT set CAP_PROP_AUTO_EXPOSURE — setting it alongside EXPOSURE caused
+    # all-black frames on this driver previously.
+    # Set EXPOSURE alone (no auto_exposure toggle) to override whatever value
+    # the driver has persisted from a previous session (was -10.0 = near-black).
+    # Match cam0's value of -4. If frames are still dark try -3 or -2;
+    # if they go all-black try -5.
+    
+
     ae_actual  = cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)
     ex_actual  = cap.get(cv2.CAP_PROP_EXPOSURE)
     gain       = cap.get(cv2.CAP_PROP_GAIN)
@@ -160,6 +168,10 @@ def _camera_loop():
 
         if ret0 and ret1 and f0 is not None and f1 is not None:
             try:
+                # Lift cam0 brightness to match cam1 (additive offset computed
+                # at startup from the stable mean difference)
+                if _f0_beta != 0:
+                    f0 = cv2.convertScaleAbs(f0, alpha=1.0, beta=_f0_beta)
                 stitched = _stitch(f0, f1, calib)
                 # Downscale to 50% for the live stream — keeps encoding fast
                 # without affecting scan quality (raw frames kept at full res)
@@ -206,29 +218,96 @@ def _find_camera_indices(max_index: int = 8) -> list[int]:
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
-def _wait_for_frames(cap: cv2.VideoCapture, label: str, max_attempts: int = 60) -> bool:
+
+def _wait_for_frames(cap: cv2.VideoCapture, label: str,
+                     warmup: int = 25, stable_window: int = 8,
+                     max_attempts: int = 120) -> tuple:
     """
-    Drain the camera buffer until we get a valid, non-black frame.
-    Logs a warning if frames arrive but are all-zero (exposure issue).
+    Two-phase startup:
+      Phase 1 — drain `warmup` frames so the sensor and AGC can settle (~1 s).
+      Phase 2 — collect `stable_window` consecutive valid frames and return
+                 their average as a reliable brightness reading.
+    Returns (success: bool, stable_mean: float).
     """
-    got_any = False
-    for i in range(max_attempts):
+    # Phase 1: warmup drain — sensor/AGC not settled yet, don't measure
+    for _ in range(warmup):
+        cap.read()
+        time.sleep(0.04)
+    print(f"[Camera] {label} warmup done ({warmup} frames drained)")
+
+    # Phase 2: collect stable window
+    means = []
+    for _ in range(max_attempts):
         ret, frame = cap.read()
         if ret and frame is not None and frame.shape[0] > 0:
-            got_any = True
-            # Check pixels aren't all black — if so keep draining
-            mean = frame.mean()
-            if mean > 1.0:
-                print(f"[Camera] {label} ready after {i + 1} read(s) — mean brightness={mean:.1f}")
-                return True
-        time.sleep(0.05)
+            m = float(frame.mean())
+            if m > 1.0:
+                means.append(m)
+                if len(means) >= stable_window:
+                    avg = sum(means) / len(means)
+                    print(f"[Camera] {label} stable mean={avg:.1f} "
+                          f"(avg of {stable_window} frames)")
+                    return True, avg
+        time.sleep(0.04)
 
-    if got_any:
-        print(f"[Camera] {label} WARNING: frames arriving but all-black "
-              f"(mean≈0) — possible exposure/USB issue")
-    else:
-        print(f"[Camera] {label} did not produce valid frames after {max_attempts} attempts")
-    return False
+    if means:
+        avg = sum(means) / len(means)
+        print(f"[Camera] {label} WARNING: timed out — using mean={avg:.1f}")
+        return True, avg
+
+    print(f"[Camera] {label} ERROR: no valid frames after warmup")
+    return False, 0.0
+
+
+def _measure_mean(cap: cv2.VideoCapture, n: int = 10) -> float:
+    """Read n frames and return their average pixel mean (post-warmup only)."""
+    vals = []
+    for _ in range(n):
+        ret, frame = cap.read()
+        if ret and frame is not None:
+            vals.append(float(frame.mean()))
+        time.sleep(0.04)
+    return sum(vals) / len(vals) if vals else 0.0
+
+
+def _equalize_exposure(cap: cv2.VideoCapture, label: str,
+                       target: float, current_mean: float) -> float:
+    """
+    Probe a range of integer exposure values (driver rounds fractional steps,
+    so 0.5 increments cause oscillation).  Pick the integer that brings the
+    mean closest to `target`, then return that final mean so the caller can
+    apply a software scale for any remaining gap.
+    """
+    base = round(cap.get(cv2.CAP_PROP_EXPOSURE))
+    candidates = [base + d for d in (0, -1, +1, -2, +2)]
+    print(f"[Camera] {label} probing integer exposures {candidates} "
+          f"(current mean={current_mean:.1f}, target={target:.1f})")
+
+    best_exp  = base
+    best_mean = current_mean
+    best_diff = abs(current_mean - target)
+
+    for exp in candidates:
+        cap.set(cv2.CAP_PROP_EXPOSURE, float(exp))
+        # Settle — drain 10 frames before measuring
+        for _ in range(10):
+            cap.read()
+            time.sleep(0.04)
+        mean = _measure_mean(cap, n=8)
+        diff = abs(mean - target)
+        print(f"[Camera] {label}  exposure={exp:+d}  mean={mean:.1f}  diff={diff:.1f}")
+        if diff < best_diff:
+            best_diff, best_mean, best_exp = diff, mean, exp
+
+    # Apply the winner
+    cap.set(cv2.CAP_PROP_EXPOSURE, float(best_exp))
+    for _ in range(10):
+        cap.read()
+        time.sleep(0.04)
+    final_mean = _measure_mean(cap, n=8)
+    print(f"[Camera] {label} best hardware: exposure={best_exp:+d}  "
+          f"mean={final_mean:.1f}  target={target:.1f}")
+    return final_mean
 
 
 def start(cam0_index: int = 0, cam1_index: int = 2) -> bool:
@@ -252,8 +331,10 @@ def start(cam0_index: int = 0, cam1_index: int = 2) -> bool:
             print("[Camera] ERROR: Could not open master camera")
             return False
 
-    if not _wait_for_frames(_cap0, "cam0 (master)"):
+    cam0_ok, cam0_mean = _wait_for_frames(_cap0, "cam0 (master)")
+    if not cam0_ok:
         print("[Camera] WARNING: cam0 never produced frames — continuing anyway")
+        cam0_mean = 0.0
 
     # ── Generous settle time so the USB bus is free before opening cam1 ───────
     print("[Camera] Waiting 2 s before opening cam1...")
@@ -273,7 +354,13 @@ def start(cam0_index: int = 0, cam1_index: int = 2) -> bool:
             print("[Camera] Only one camera found — running single-camera mode")
 
     if _cap1 is not None:
-        _wait_for_frames(_cap1, "cam1 (slave)")
+        cam1_ok, cam1_mean = _wait_for_frames(_cap1, "cam1 (slave)")
+        # Compute additive offset to lift cam0 up to cam1's brightness level
+        global _f0_beta
+        if cam0_mean > 5.0 and cam1_mean > 5.0:
+            _f0_beta = int(cam1_mean - cam0_mean)
+            print(f"[Camera] cam0 brightness offset = +{_f0_beta}  "
+                  f"(cam0={cam0_mean:.1f} → target={cam1_mean:.1f})")
 
     _running = True
     t = threading.Thread(target=_camera_loop, daemon=True)

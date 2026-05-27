@@ -6,6 +6,7 @@
 
 import sys
 import os
+import csv
 import json
 import base64
 import tempfile
@@ -155,6 +156,14 @@ class MedicineItem(BaseModel):
 class ExpectedListPayload(BaseModel):
     medicines: list[MedicineItem]
 
+class CalibrationUpdate(BaseModel):
+    cam_width:   int | None = None
+    cam_height:  int | None = None
+    crop0_right: int | None = None
+    crop1_left:  int | None = None
+    y_offset:    int | None = None
+    x_offset:    int | None = None
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -174,6 +183,36 @@ def b64_to_frame(b64: str) -> np.ndarray:
 def get_calibration():
     """Return the current camera calibration values to the frontend."""
     return load_calibration()
+
+
+@app.post("/calibration")
+def update_calibration(update: CalibrationUpdate):
+    """
+    Write updated calibration values to calibration.json, then restart the
+    cameras so the new resolution takes effect immediately.
+    Only fields that are explicitly provided are updated; the rest are kept.
+    """
+    current = load_calibration()
+
+    if update.cam_width   is not None: current["cam_width"]   = update.cam_width
+    if update.cam_height  is not None: current["cam_height"]  = update.cam_height
+    if update.crop0_right is not None: current["crop0_right"] = update.crop0_right
+    if update.crop1_left  is not None: current["crop1_left"]  = update.crop1_left
+    if update.y_offset    is not None: current["y_offset"]    = update.y_offset
+    if update.x_offset    is not None: current["x_offset"]    = update.x_offset
+
+    try:
+        with open(_CALIB_PATH, "w") as f:
+            json.dump(current, f, indent=2)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not write calibration.json: {e}")
+
+    # Restart cameras so the new resolution is applied
+    cam_module.stop()
+    time.sleep(1.0)          # let DirectShow fully release the handles
+    cam_module.start()
+
+    return {"calibration": current, "restarted": True}
 
 
 @app.get("/video_feed")
@@ -341,6 +380,42 @@ def clear_medicines():
     global expected_list
     expected_list = []
     return {"medicines": []}
+
+
+# ── /drug-database ────────────────────────────────────────────────────────────
+
+@app.get("/drug-database")
+def get_drug_database():
+    """Read medicine_db.csv and return every drug name as a list."""
+    db_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "data", "medicine_db.csv"
+    )
+    drugs = []
+    try:
+        with open(db_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for i, row in enumerate(reader, 1):
+                name = row.get("name", "").strip()
+                if name:
+                    drugs.append({"id": i, "name": name})
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="medicine_db.csv not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not read medicine_db.csv: {e}")
+    return {"drugs": drugs, "total": len(drugs)}
+
+@app.get("drug-edit_database")
+def edit_drug_database(item):
+    pass
+
+
+@app.get("drug-remove")
+def remove_drug_database(item):
+    pass
+
+@app.get("drug-add")
+def add_drug_database(item):
+    pass
 
 
 # ── /scan ─────────────────────────────────────────────────────────────────────
