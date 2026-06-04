@@ -20,7 +20,7 @@ LABEL_CLASS_ID   = 1
 QR_CLASS_ID      = 2
 
 # ── Layer 1 — shape detection confidence thresholds ───────────────────────────
-L1_CONF_RUN      = 0.60   # minimum conf to even run inference
+L1_CONF_RUN      = 0.75   # minimum conf to even run inference
 L1_CONF_QR       = 0.50   # minimum conf to keep a QR detection
 L1_CONF_OTHER    = 0.4   # minimum conf to keep a box / label detection
 L1_PAD_QR        = 20    # perspective-warp padding (px) for QR crops

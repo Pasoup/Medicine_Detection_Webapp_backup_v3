@@ -6,7 +6,6 @@
 
 import sys
 import os
-import csv
 import json
 import base64
 import tempfile
@@ -26,6 +25,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 import camera as cam_module
+from database import init_db, get_db
 
 # ── Add project root so pipeline imports work ─────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -41,7 +41,7 @@ from pipeline.consensus import consensus_check
 
 
 os.makedirs(LOG_DIR, exist_ok=True)
-
+init_db()
 # ── Calibration (written by image_taking/calibration.py) ──────────────────────
 _CALIB_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -154,6 +154,7 @@ class MedicineItem(BaseModel):
     name:     str
     quantity: int = 1
 
+
 class ExpectedListPayload(BaseModel):
     medicines: list[MedicineItem]
 
@@ -165,7 +166,187 @@ class CalibrationUpdate(BaseModel):
     y_offset:    int | None = None
     x_offset:    int | None = None
 
+# ---- Database ------------    
+class DrugCreate(BaseModel):
+    name: str
 
+class DrugUpdate(BaseModel):
+    name: str
+
+class ScanResultItem(BaseModel):
+    box_id:         str | None = None
+    final_name:     str | None = None
+    scan_status:    str | None = None
+    confidence:     str | None = None
+    ocr_raw:        str | None = None
+    qr_name:        str | None = None
+
+class SaveHistroyPayload(BaseModel):
+    timestamp:      str 
+    scanned_by:     str | None =None
+    matched:        int = 0
+    missing:        int = 0
+    extra:          int = 0
+    review:         int = 0
+    unknown:        int = 0
+    annotated:      str | None = None
+    results:        list[ScanResultItem] = []
+
+
+
+def _reload_medicine_db():
+    global medicine_db
+    with get_db() as conn:
+        rows = conn.execute("SELECT name FROM drugs").fetchall()
+    medicine_db = sorted(r["name"].upper() for r in rows)
+    print(f"[DB] medicine_db reloaded - {len(medicine_db)} entries")
+
+# ── Database Endpoint ─────────────────────────────────────────────────────────
+
+@app.get("/drug-database")
+def get_drug_database():
+    with get_db() as conn:
+        rows = conn.execute("SELECT id, name FROM drugs ORDER BY name").fetchall()
+    drugs = [{"id": r["id"], "name": r["name"]} for r in rows]
+    return {"drugs": drugs, "total": len(drugs)}
+
+@app.post("/drug-database")
+def add_drug(payload: DrugCreate):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Drug name cannot be empty")
+
+    try:
+        with get_db() as conn:
+            conn.execute("INSERT INTO drugs (name) VALUES (?)", (name,))
+
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"'{name}' already exists")
+    _reload_medicine_db()
+    return get_drug_database()
+
+@app.delete("/drug-database/{drug_id}")
+def delete_drug(drug_id: int):
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM drugs WHERE id = ?", (drug_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail=f"Drug ID: {drug_id} not found")
+    _reload_medicine_db()
+    return get_drug_database()
+
+@app.put("/drug-database/{drug_id}")
+def update_drug(drug_id: int, payload: DrugUpdate):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Drug id cannot be empty")
+    try:
+        with get_db() as conn:
+            cur = conn.execute("UPDATE drugs SET name = ? WHERE id = ?", (name,drug_id))
+            
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail=f"Drug ID {drug_id} not found")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"'{name}' already exists")
+    _reload_medicine_db()
+    return get_drug_database()
+
+
+
+@app.post("/history")
+def save_history(payload: SaveHistroyPayload):
+    with get_db() as conn:
+        cur = conn.execute("""
+            INSERT INTO scan_sessions               
+                (timestamp, scanned_by, matched, missing, extra, review, unknown, 
+annotated)
+            VALUES (?,?,?,?,?,?,?,?)
+            """, (payload.timestamp,
+                  payload.scanned_by,
+                  payload.matched,
+                  payload.missing,
+                  payload.extra,
+                  payload.review,
+                  payload.unknown,
+                  payload.annotated,
+        ))
+        session_id = cur.lastrowid
+        for r in payload.results:
+            conn.execute(""" 
+                INSERT INTO scan_results
+                         (session_id, box_id, final_name,scan_status,confidence,ocr_raw,
+qr_name)
+                VALUES (?,?,?,?,?,?,?)
+            """, (
+                session_id,
+                r.box_id,
+                r.final_name,
+                r.scan_status,
+                r.confidence,
+                r.ocr_raw,
+                r.qr_name
+            ))
+    return {"id" : session_id, "status" : "saved"}
+
+
+@app.get("/history")
+def get_history():
+    with get_db() as conn:
+        session = conn.execute(""" 
+            SELECT * FROM scan_sessions ORDER BY id DESC
+
+""").fetchall()
+    result = []
+
+    for s in session:
+        result.append({
+            "id":   s["id"],
+            "timestamp":    s["timestamp"],
+            "scanned_by":   s["scanned_by"],
+            "matched":      s["matched"],
+            "missing":      s["missing"],
+            "extra":        s["extra"],
+            "review":       s["review"],
+            "unknown":      s["unknown"],
+        })
+    return {"history": result, "total": len(result)}
+
+@app.get("/history/{session_id}")
+def get_history_detail(session_id: int):
+    with get_db() as conn:
+        session = conn.execute(
+            "SELECT * FROM scan_sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    
+        results = conn.execute(
+            "SELECT * FROM scan_results WHERE session_id = ?", (session_id,)
+        ).fetchall()
+    return {
+        "id":         session["id"],
+        "timestamp":  session["timestamp"],
+        "scanned_by": session["scanned_by"],
+        "matched":    session["matched"],
+        "missing":    session["missing"],
+        "extra":      session["extra"],
+        "review":     session["review"],
+        "unknown":    session["unknown"],
+        "annotated":  session["annotated"],
+        "results": [
+            {
+                "box_id":      r["box_id"],
+                "final_name":  r["final_name"],
+                "scan_status": r["scan_status"],
+                "confidence":  r["confidence"],
+                "ocr_raw":     r["ocr_raw"],
+                "qr_name":     r["qr_name"],
+            }
+            for r in results
+        ]
+    }
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def b64_to_frame(b64: str) -> np.ndarray:
@@ -383,100 +564,6 @@ def clear_medicines():
     return {"medicines": []}
 
 
-# ── /drug-database ────────────────────────────────────────────────────────────
-
-@app.get("/drug-database")
-def get_drug_database():
-    """Read medicine_db.csv and return every drug name as a list."""
-    db_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "data", "medicine_db.csv"
-    )
-    drugs = []
-    try:
-        with open(db_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for i, row in enumerate(reader, 1):
-                name = row.get("name", "").strip()
-                if name:
-                    drugs.append({"id": i, "name": name})
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="medicine_db.csv not found")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not read medicine_db.csv: {e}")
-    return {"drugs": drugs, "total": len(drugs)}
-
-class DrugCreate(BaseModel):
-    name: str
-
-class DrugUpdate(BaseModel):
-    name: str
-
-_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "medicine_db.csv")
-
-def _read_drug_names() -> list[str]:
-    """Return all non-empty drug names from medicine_db.csv."""
-    names = []
-    try:
-        with open(_DB_PATH, newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                n = row.get("name", "").strip()
-                if n:
-                    names.append(n)
-    except FileNotFoundError:
-        pass
-    return names
-
-def _write_drug_names(names: list[str]) -> None:
-    """Overwrite medicine_db.csv with the given list of names."""
-    with open(_DB_PATH, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["name"])
-        writer.writeheader()
-        for n in names:
-            writer.writerow({"name": n})
-
-def _names_to_response(names: list[str]) -> dict:
-    return {"drugs": [{"id": i + 1, "name": n} for i, n in enumerate(names)],
-            "total": len(names)}
-
-
-@app.post("/drug-database")
-def add_drug(payload: DrugCreate):
-    """Append a new drug name to medicine_db.csv."""
-    name = payload.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Drug name cannot be empty")
-    names = _read_drug_names()
-    if name.upper() in [n.upper() for n in names]:
-        raise HTTPException(status_code=400, detail=f"'{name}' already exists in the database")
-    names.append(name)
-    _write_drug_names(names)
-    return _names_to_response(names)
-
-
-@app.put("/drug-database/{drug_id}")
-def update_drug(drug_id: int, payload: DrugUpdate):
-    """Edit the name of an existing drug by its 1-based row ID."""
-    name = payload.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Drug name cannot be empty")
-    names = _read_drug_names()
-    if drug_id < 1 or drug_id > len(names):
-        raise HTTPException(status_code=404, detail=f"Drug ID {drug_id} not found")
-    names[drug_id - 1] = name
-    _write_drug_names(names)
-    return _names_to_response(names)
-
-
-@app.delete("/drug-database/{drug_id}")
-def delete_drug(drug_id: int):
-    """Remove a drug from medicine_db.csv by its 1-based row ID."""
-    names = _read_drug_names()
-    if drug_id < 1 or drug_id > len(names):
-        raise HTTPException(status_code=404, detail=f"Drug ID {drug_id} not found")
-    removed = names.pop(drug_id - 1)
-    _write_drug_names(names)
-    return {"removed": removed, **_names_to_response(names)}
-
 
 # ── /scan ─────────────────────────────────────────────────────────────────────
 
@@ -597,13 +684,7 @@ def scan(req: ScanRequest):
     def get_layer4():
         nonlocal layer4_detections
         if layer4_detections is None:
-            # Scan each camera frame at full resolution instead of the stitched
-            # frame.  The stitched image (1664×1920+) gets downscaled to ~640px
-            # by YOLO's default imgsz, leaving each camera half at only ~320px —
-            # too small for reliable medicine identification.  Scanning the
-            # individual rotated frames (each 1080×1920) keeps full resolution
-            # and layer4_scan_full_frame offsets the bboxes back to stitched
-            # coordinates automatically.
+
             individual = [f for f in [f0_rotated, f1_rotated] if f is not None]
             layer4_detections = layer4_scan_full_frame(
                 stitched,
@@ -611,9 +692,6 @@ def scan(req: ScanRequest):
             )
         return layer4_detections
 
-    # Build expected quantity map — handles both formats:
-    #   ["SEFLOC", "ATENOLOL"]               (plain strings, quantity defaults to 1)
-    #   [{"name":"SEFLOC","quantity":2}, ...] (objects with quantity)
     expected_qty: dict = {}
     for item in req.expected:
         if isinstance(item, str):
@@ -624,7 +702,7 @@ def scan(req: ScanRequest):
         if n:
             expected_qty[n] = expected_qty.get(n, 0) + q
 
-    # Track how many of each medicine were found during this scan
+
     found_counts: dict = {}
     results = []
 
@@ -670,11 +748,13 @@ def scan(req: ScanRequest):
             vision_name, vision_conf = "UNKNOWN", 0.0
 
         verdict = consensus_check(
-            ocr_texts   = [ocr_in],
-            qr_texts    = all_qr,
-            vision_name = vision_name,
-            vision_conf = vision_conf,
-            medicine_db = medicine_db,
+            ocr_texts    = [ocr_in],
+            qr_texts     = all_qr,
+            vision_name  = vision_name,
+            vision_conf  = vision_conf,
+            medicine_db  = medicine_db,
+            ocr_db_name  = ocr_db_name,
+            ocr_db_score = ocr_db_score,
         )
 
         name = verdict["final_name"].upper()

@@ -48,7 +48,23 @@ export async function clearMedicines() {
 }
 
 export async function getHistory() {
-  const res = await fetch(`${BASE}/scan/history`);
+  const res = await fetch(`${BASE}/history`);
+  return res.json();
+}
+
+export async function getHistoryDetail(id) {
+  const res = await fetch(`${BASE}/history/${id}`);
+  return res.json();
+  
+}
+
+export async function saveHistory(entry) 
+{
+  const res = await fetch(`${BASE}/history`,{
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json'},
+    body: JSON.stringify(entry),
+  });
   return res.json();
 }
 

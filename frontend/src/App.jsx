@@ -11,6 +11,8 @@ import DashboardPage  from "./pages/DashboardPage";
 import MasterDataPage from "./pages/MasterDataPage";
 import SetupPage      from "./pages/SetupPage";
 
+import { saveHistory, getHistory, getHistoryDetail} from "./api";
+
 const PAGE_TITLES = {
   dashboard: "Dashboard",
   scan:      "Scan Medicines",
@@ -136,26 +138,28 @@ export default function App() {
   // ── Close & review — push to history ─────────────────────────────────────
   const handleCloseAndReview = useCallback(() => {
     if (popupData?.rawData) {
-      const data    = popupData.rawData;
-      const allGood = popupData.missing.length === 0
-                   && popupData.extra.length   === 0
-                   && popupData.review.length  === 0
-                   && popupData.unknown.length === 0;
-      setHistory(prev => [{
-        id:         Date.now(),
-        timestamp:  sessionStart.current || data.timestamp,
-        scanned_by: user?.username || "—",
-        matched:    data.summary.matched,
-        missing:    data.summary.missing,
-        extra:      data.summary.extra,
-        review:     data.summary.review,
-        unknown:    data.summary.unknown || 0,
-        summary:    allGood
-          ? `All verified (${data.summary.matched} matched)`
-          : data.results.find(r => r.scan_status === "MATCHED")?.final_name || "No match",
-        results:    data.results,
-        annotated:  sessionAnnotated.current || data.annotated_b64,
-      }, ...prev].slice(0, 50));
+        const data = popupData.rawData;
+        const entry = {
+            timestamp:  sessionStart.current || data.timestamp,
+            scanned_by: user?.username || "—",
+            matched:    data.summary.matched,
+            missing:    data.summary.missing,
+            extra:      data.summary.extra,
+            review:     data.summary.review,
+            unknown:    data.summary.unknown || 0,
+            annotated:  sessionAnnotated.current || data.annotated_b64,
+            results:    data.results.map(r => ({
+                box_id:      r.box_id?.toString() || null,
+                final_name:  r.final_name,
+                scan_status: r.scan_status,
+                confidence:  r.confidence,
+                ocr_raw:     r.ocr_raw,
+                qr_name:     r.qr_name,
+            })),
+        };
+        saveHistory(entry).then(saved => {
+            setHistory(prev => [{ ...entry, id: saved.id }, ...prev]);
+        });
     }
     resetSession();
     setShowPopup(false);
@@ -168,27 +172,41 @@ export default function App() {
     const now     = new Date().toISOString();
     const allGood = summary.missing === 0 && summary.extra === 0
                  && summary.review  === 0 && summary.unknown === 0;
-    setHistory(prev => [{
-      id:         Date.now(),
-      timestamp:  sessionStart.current || now,
-      scanned_by: user?.username || "—",
-      matched:    summary.matched,
-      missing:    summary.missing,
-      extra:      summary.extra,
-      review:     summary.review  || 0,
-      unknown:    summary.unknown || 0,
-      summary:    allGood
-        ? `All verified (${summary.matched} matched)`
-        : scanResults?.find(r => r.scan_status === "MATCHED")?.final_name || "Manual complete",
-      results:    scanResults || [],
-      annotated:  sessionAnnotated.current || null,
-    }, ...prev].slice(0, 50));
+    const entry = {
+        timestamp:  sessionStart.current || now,
+        scanned_by: user?.username || "—",
+        matched:    summary.matched,
+        missing:    summary.missing,
+        extra:      summary.extra,
+        review:     summary.review  || 0,
+        unknown:    summary.unknown || 0,
+        annotated:  sessionAnnotated.current || null,
+        results:    (scanResults || []).map(r => ({
+            box_id:      r.box_id?.toString() || null,
+            final_name:  r.final_name,
+            scan_status: r.scan_status,
+            confidence:  r.confidence,
+            ocr_raw:     r.ocr_raw,
+            qr_name:     r.qr_name,
+        })),
+    };
+    saveHistory(entry).then(saved => {
+        setHistory(prev => [{ ...entry, id: saved.id }, ...prev]);
+    });
 
     resetSession();
     setExpected([]);
     setScanResults(null);
     setSummary({ matched: 0, missing: 0, extra: 0, review: 0, unknown: 0 });
   }, [expected, summary, scanResults, resetSession]);
+
+  useEffect(() => {
+    getHistory().then(data => {
+      if(data.history) {
+        setHistory(data.history);
+      }
+    });
+  }, [])
 
   // F5 = Complete & Save
   useEffect(() => {

@@ -19,11 +19,13 @@ from utils.medicine_db import (
 
 
 def consensus_check(
-    ocr_texts:   list,
-    qr_texts:    list,
-    vision_name: str,
-    vision_conf: float,
-    medicine_db: list,
+    ocr_texts:    list,
+    qr_texts:     list,
+    vision_name:  str,
+    vision_conf:  float,
+    medicine_db:  list,
+    ocr_db_name:  str   = None,
+    ocr_db_score: float = None,
 ) -> dict:
     """
     Trust hierarchy (updated):
@@ -49,15 +51,20 @@ def consensus_check(
         qr_medicine = qr_db_name if qr_db_name else qr_combined.upper()
 
     # ── Stage 2 · OCR → DB ───────────────────────────────────────────────────
+    # Use pre-computed scores from server.py if provided (includes L3 boost).
+    # Only recalculate if nothing was passed in.
     ocr_medicine = None
-    ocr_db_name  = None
-    ocr_db_score = 0.0
     ocr_db_tier  = "NONE"
-    if ocr_combined:
-        ocr_clean              = normalize_ocr(ocr_combined)
+    if ocr_db_name is not None and ocr_db_score is not None:
+        ocr_db_tier  = db_confidence_tier(ocr_db_score)
+        ocr_medicine = ocr_db_name if ocr_db_name else None
+    elif ocr_combined:
+        ocr_clean                 = normalize_ocr(ocr_combined)
         ocr_db_name, ocr_db_score = db_match(ocr_clean, medicine_db)
-        ocr_db_tier            = db_confidence_tier(ocr_db_score)
-        ocr_medicine           = ocr_db_name if ocr_db_name else None
+        ocr_db_tier               = db_confidence_tier(ocr_db_score)
+        ocr_medicine              = ocr_db_name if ocr_db_name else None
+    else:
+        ocr_db_score = 0.0
 
     # ── Stage 3 · Layer 4 YOLO ───────────────────────────────────────────────
     vision_medicine = None

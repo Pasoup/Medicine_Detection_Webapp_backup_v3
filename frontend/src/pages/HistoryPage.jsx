@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { getHistoryDetail } from "../api";
 import HistoryDetailPopup from "../components/HistoryDetailPopup";
 
 function formatDate(iso) {
@@ -142,7 +143,7 @@ export default function HistoryPage({ history }) {
                     return (
                       <tr
                         key={item.id}
-                        onClick={() => setDetail(item)}
+                        onClick={() => getHistoryDetail(item.id).then(data => setDetail(data))}
                         className="hover:bg-slate-50 cursor-pointer transition-colors"
                       >
                         <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">
@@ -174,7 +175,7 @@ export default function HistoryPage({ history }) {
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <button
-                            onClick={e => { e.stopPropagation(); setDetail(item); }}
+                            onClick={e => { e.stopPropagation(); getHistoryDetail(item.id).then(data =>setDetail(data)); }}
                             className="text-xs text-blue-600 hover:text-blue-700 font-medium
                                        hover:underline transition-colors"
                           >

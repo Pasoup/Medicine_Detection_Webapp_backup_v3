@@ -3,8 +3,6 @@ import calibration from "../utils/calibration.json";
 import { saveCalibration } from "../api/index";
 
 
-// Per-resolution stitch offsets — fill these in once per resolution.
-// Applied automatically when the user picks a resolution; never shown in the UI.
 const RESOLUTION_PRESETS = {
   "1950x1950": { label: "2048×1536", crop0_right: 0, crop1_left: 0, y_offset: 89,  x_offset: -340 },
   "1500x1500": { label: "1600×1200", crop0_right: 0, crop1_left: 0, y_offset: 74,  x_offset: -273 },

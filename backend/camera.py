@@ -8,6 +8,9 @@ Runs a background thread that continuously reads, stitches, and stores:
   _latest_raw   — (f0, f1) raw BGR frames for the /scan endpoint
 """
 
+
+#stiched image is 2732 × 1959 px
+
 import cv2
 import numpy as np
 import threading
@@ -273,12 +276,7 @@ def _measure_mean(cap: cv2.VideoCapture, n: int = 10) -> float:
 
 def _equalize_exposure(cap: cv2.VideoCapture, label: str,
                        target: float, current_mean: float) -> float:
-    """
-    Probe a range of integer exposure values (driver rounds fractional steps,
-    so 0.5 increments cause oscillation).  Pick the integer that brings the
-    mean closest to `target`, then return that final mean so the caller can
-    apply a software scale for any remaining gap.
-    """
+    
     base = round(cap.get(cv2.CAP_PROP_EXPOSURE))
     candidates = [base + d for d in (0, -1, +1, -2, +2)]
     print(f"[Camera] {label} probing integer exposures {candidates} "
