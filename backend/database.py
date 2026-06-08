@@ -1,9 +1,9 @@
 import sqlite3
 import os
-
+from passlib.context import CryptContext
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data","medverify.db")
-
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -28,7 +28,7 @@ def init_db() -> None:
                 review      INTEGER DEFAULT 0,
                 unknown     INTEGER DEFAULT 0,
                 annotated   TEXT
-                );
+            );
             
             CREATE TABLE IF NOT EXISTS scan_results(
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,5 +40,17 @@ def init_db() -> None:
                 ocr_raw     TEXT,
                 qr_name     TEXT
             );
+            
+            CREATE TABLE IF NOT EXISTS users (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                username    TEXT    NOT NULL UNIQUE,
+                password_hash   TEXT NOT NULL,
+                role        TEXT DEFAULT 'pharmacist' 
+            );
+        
         """)
+        hashed = pwd_context.hash("1234")
+
+        conn.execute("INSERT OR IGNORE INTO users(username,password_hash,role) VALUES (?,?,?)", ('admin',hashed,'admin'))
+        conn.commit()
     print("[DB] SQLite initialised -> ", DB_PATH)

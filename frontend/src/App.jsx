@@ -142,6 +142,7 @@ export default function App() {
         const entry = {
             timestamp:  sessionStart.current || data.timestamp,
             scanned_by: user?.username || "—",
+            location:   localStorage.getItem("hospital_name" || ""),
             matched:    data.summary.matched,
             missing:    data.summary.missing,
             extra:      data.summary.extra,
@@ -175,8 +176,9 @@ export default function App() {
     const entry = {
         timestamp:  sessionStart.current || now,
         scanned_by: user?.username || "—",
+        location:   localStorage.getItem("hospital_name") || "",
         matched:    summary.matched,
-        missing:    summary.missing,
+         missing:    summary.missing,
         extra:      summary.extra,
         review:     summary.review  || 0,
         unknown:    summary.unknown || 0,

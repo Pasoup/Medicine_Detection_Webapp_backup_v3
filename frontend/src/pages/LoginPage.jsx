@@ -14,15 +14,25 @@ export default function LoginPage({ onLogin }) {
     e.preventDefault();
     setLoading(true);
     setError("");
-
-    setTimeout(() => {
-      if (username === "admin" && password === "1234") {
-        onLogin({ username: "admin", role: "Administrator" });
-      } else {
-        setError("Invalid username or password.");
-        setLoading(false);
-      }
-    }, 400);
+    fetch("http://localhost:8000/auth/login",
+    {
+      method: "POST",
+      headers : {"Content-Type" : "application/json"},
+      body: JSON.stringify({username,password})
+    }).then(res => {
+      if (!res.ok) throw new Error("invalid credentials")
+      return res.json()  
+    })
+    .then(data => {
+      setLoading(false)
+      console.log( "acess tokensssss: "+ data.access_token)
+      localStorage.setItem("access_token", data.access_token)
+      onLogin({username : username, role: "Administrator"})
+    })
+    .catch(err => {
+      setLoading(false)
+      setError("Failed to login")
+    })
   };
 
   return (

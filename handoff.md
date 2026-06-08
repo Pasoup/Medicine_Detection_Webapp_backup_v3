@@ -1,6 +1,6 @@
 # MedVerify v3 — Session Handoff
 
-> Updated: 2026-06-02
+> Updated: 2026-06-04
 > Project root: C:\Users\pasul\Desktop\InternStuff\v3_webapp
 
 ---
@@ -17,9 +17,9 @@
 | Backend   | Python FastAPI                                                                           |
 | Camera    | OpenCV (dual USB cameras via DirectShow/CAP_DSHOW)                                       |
 | Detection | YOLO OBB (Layer 1), QR decode (Layer 2), Tesseract OCR (Layer 3), YOLO Vision (Layer 4) |
-| Drug DB   | SQLite — backend/data/medverify.db (migrated from CSV this session)                      |
+| Drug DB   | SQLite — backend/data/medverify.db                                                       |
 | History   | SQLite — scan_sessions + scan_results tables (persistent across restarts)                |
-| Auth      | Hardcoded admin / 1234 in LoginPage.jsx — not real yet                                   |
+| Auth      | JWT-based — backend fully protected. Frontend wiring is next (Jun 5).                   |
 
 ### How to run
 
@@ -40,7 +40,7 @@ cd frontend && npm run dev
 ```
 backend/
 ├── server.py               # FastAPI app — all REST endpoints
-├── database.py             # SQLite init, get_db(), all table definitions  ← NEW
+├── database.py             # SQLite init, get_db(), all table definitions
 ├── camera.py               # Dual-camera capture, stitching, brightness equalization
 ├── config.py               # App config (camera indices, paths, thresholds)
 ├── pipeline/
@@ -54,7 +54,7 @@ backend/
 │   ├── medicine_db.py      # Fuzzy match helpers used by pipeline (reads from SQLite now)
 │   └── font.py             # Thai font rendering for annotated output
 └── data/
-    ├── medverify.db        # SQLite database — drugs, scan_sessions, scan_results  ← NEW
+    ├── medverify.db        # SQLite database — drugs, scan_sessions, scan_results, users
     ├── medicine_db.csv     # Legacy CSV — kept for reference only, no longer used
     ├── medicine_images/    # Reference images per drug (used by Layer 4)
     └── homography.npy      # Camera homography calibration matrix
@@ -65,12 +65,12 @@ backend/
 ```
 frontend/src/
 ├── App.jsx                 # Root: auth gate, all state (history, scan, expected), nav
-├── api/index.js            # All fetch() calls to backend API
+├── api/index.js            # All fetch() calls to backend API — Bearer header NOT wired yet
 ├── pages/
-│   ├── LoginPage.jsx       # Login form (hardcoded admin/1234 — real auth not built yet)
+│   ├── LoginPage.jsx       # Login form — still hardcoded admin/1234, needs real POST next
 │   ├── ScanPage.jsx        # Main scan UI — camera feed, expected list, results table
 │   ├── HistoryPage.jsx     # Scan history table with search/filter/pagination
-│   ├── DashboardPage.jsx   # Stats overview (placeholder — not pulling real DB data yet)
+│   ├── DashboardPage.jsx   # Stats — reads real data from history prop (no /stats endpoint needed)
 │   ├── MasterDataPage.jsx  # Drug database CRUD + (placeholder) User/Role management
 │   └── SetupPage.jsx       # Camera resolution, calibration, brightness setup
 ├── components/
@@ -86,30 +86,25 @@ frontend/src/
 
 ---
 
-## 3. What Was Completed This Session
+## 3. What Was Completed This Session (June 4, 2026)
 
-### SQLite Phase 1 — Drug Database
+### Authentication — Backend (fully complete)
 
-- **`backend/database.py` created** — `init_db()`, `get_db()`, `CREATE TABLE drugs` with AUTOINCREMENT
-- **CSV → SQLite migration** — `migrate_csv.py` run once, 17 drugs imported, script deleted
-- **Drug CRUD rewritten** — `server.py` drug endpoints now use sqlite3. Old CSV helpers (`_read_drug_names`, `_write_drug_names`, `_names_to_response`) deleted
-- **`_reload_medicine_db()` helper added** — called after every drug add/edit/delete so the in-memory pipeline list updates immediately without server restart
-- **Drug IDs are now stable** — AUTOINCREMENT primary key, deleting a row does not shift other IDs
+- **`users` table** added to `database.py` — `id`, `username` (UNIQUE), `password_hash`, `role` (DEFAULT 'pharmacist')
+- **Default admin seeded** — `INSERT OR IGNORE` seeds `admin` / bcrypt hash of `1234` / role `admin` on every `init_db()` call. Safe to run repeatedly.
+- **Dependencies installed** — `pip install python-jose[cryptography] passlib[bcrypt]` and `pip install bcrypt==4.0.1` (version pin required for passlib compatibility)
+- **`pwd_context`** — `CryptContext(schemes=["bcrypt"])` defined in `database.py`, imported into `server.py`
+- **`POST /auth/login`** — accepts `LoginRequest(username, password)`, verifies bcrypt hash, returns `{"access_token": JWT, "token_type": "bearer"}`. JWT payload: `{"sub": username, "role": role, "exp": now + 30min}`
+- **`get_current_user()` dependency** — decodes Bearer token, extracts `sub`, raises 401 on invalid/expired. Uses `OAuth2PasswordBearer(tokenUrl="/auth/login")` + `Depends()`
+- **All 18 endpoints protected** — `current_user = Depends(get_current_user)` added to every endpoint except `POST /auth/login`
+- **Verified working** — unauthenticated requests to `/drug-database` return 401. Valid login returns a unique JWT that expires after 30 minutes.
 
-### SQLite Phase 2 — Persistent Scan History
+### Previously completed (prior sessions)
 
-- **`scan_sessions` + `scan_results` tables** added to `database.py`
-- **`POST /history`** endpoint — saves session summary + all result rows in one transaction, returns `session_id`
-- **`GET /history`** endpoint — returns all sessions ordered newest first (excludes `annotated` blob for performance)
-- **`GET /history/{id}`** endpoint — returns full session + all `scan_results` rows for detail popup
-- **`App.jsx` wired up** — `saveHistory()` called in both `handleCloseAndReview` and `handleComplete`; `useEffect` on mount fetches `GET /history` to restore state
-- **`HistoryPage.jsx` wired up** — clicking a row calls `getHistoryDetail(item.id)` to load full data from DB instead of in-memory object
-- **`api/index.js`** — `saveHistory()`, `getHistory()`, `getHistoryDetail()` added
-
-### Pipeline Bug Fix — OCR Score Recalculation
-
-- **Root cause** — `server.py` computed `ocr_db_score` correctly (including Layer 3 internal boost), then threw it away and passed raw text to `consensus.py` which recalculated from scratch and got a different answer. A score of 95 was being ignored and falling through to UNKNOWN.
-- **Fix** — `consensus.py` now accepts `ocr_db_name` and `ocr_db_score` as optional parameters. If provided, Stage 2 skips recalculation entirely and uses them directly. `server.py` now passes its pre-computed scores down.
+- SQLite drug DB (stable AUTOINCREMENT IDs, no row-shift bug)
+- Persistent scan history (scan_sessions + scan_results)
+- OCR consensus score fix (eliminated triple-recalculation bug)
+- DashboardPage already reads real data from history prop
 
 ---
 
@@ -122,33 +117,53 @@ frontend/src/
 - Live MJPEG camera feed in browser
 - Expected medicine list management (add/remove/quantity)
 - Scan result popup with matched/missing/extra/unknown breakdown
-- **Drug database CRUD against SQLite** (stable IDs, no row-shift bug)
-- **Scan history persistent** — survives page refresh and server restart
-- **History detail popup loads from DB** — annotated image + all result rows
+- Drug database CRUD against SQLite (stable IDs, no row-shift bug)
+- Scan history persistent — survives page refresh and server restart
+- History detail popup loads from DB — annotated image + all result rows
+- **JWT authentication backend** — login endpoint, token generation, middleware, all routes protected
 - Perspective/straightening calibration on detected crops (Layer 1)
 - Camera resolution and calibration setup page
 - Camera autofocus lock on both cameras
 
 ### Known Issues / Still To Build
 
-- **Auth is fake** — admin / 1234 hardcoded in LoginPage.jsx, no backend validation
-- **Dashboard stats are placeholder** — not pulling real data from DB
-- **Auto-logout logic** — UI exists but idle timer not wired up
-- **User management / Role management in MasterData** — Coming soon placeholders only
+- **Frontend auth not wired** — LoginPage.jsx still uses hardcoded check, api/index.js does not attach Bearer header. This is the NEXT task (Jun 5).
+- **Auth guard not in frontend** — no redirect to /login if no token, no 401 handling
+- **Auto-logout idle timer** — not wired up yet
+- **Medicine Code feature** — new tab + DB tables + ScanPage dropdown not built yet
+- **User management in MasterData** — Coming soon placeholder only
 - **History export** — no Excel download yet
-- **Ambient light sensitivity** — internal lighting too weak vs office lights. Software offset partially compensates but hardware lighting needs improvement.
+- **Layer 4 only handles 8 medicine types** — plan to expand to 20 types (12 new classes, 250 images each, manual annotation required for new classes)
+- **Ambient light sensitivity** — software offset partially compensates but hardware lighting needs improvement
 
 ---
 
 ## 5. Active Decisions
 
+### JWT auth — backend only, frontend is next
+
+Backend is fully protected. Frontend still uses hardcoded login. Do not add any more backend endpoints without also adding `Depends(get_current_user)`.
+
+### JWT constants in server.py
+
+```python
+SECRET_KEY = "abefkjhaekjfhkajef"   # fine for internship, change before any real deployment
+ALGORITHM  = "HS256"
+```
+
+Token expiry: 30 minutes. Payload contains `sub` (username), `role`, `exp`.
+
+### bcrypt version must be pinned
+
+`passlib` has a compatibility bug with newer `bcrypt`. Pin: `pip install bcrypt==4.0.1`. Without this, `pwd_context.hash()` throws a ValueError on startup.
+
 ### SQLite is the database — medverify.db lives in backend/data/
 
-Single-workstation internship project. No server to install, file-based, Python built-in. `medverify.db` must be in `.gitignore` — it contains real scan data. Can migrate to PostgreSQL later if multi-station deployment is required.
+`medverify.db` must be in `.gitignore` — it contains real scan data and hashed passwords.
 
 ### medicine_db.csv is legacy — do not use it for CRUD
 
-The CSV still exists but is no longer the source of truth. All drug reads/writes go through SQLite. `utils/medicine_db.py` still reads from the CSV path at startup for the pipeline — this is fine because `_reload_medicine_db()` in `server.py` keeps the in-memory list up to date after any mutation.
+All drug reads/writes go through SQLite. `utils/medicine_db.py` still reads from CSV at startup for the pipeline — fine because `_reload_medicine_db()` keeps the in-memory list up to date.
 
 ### Color convention: Missing = red, Extra = amber
 
@@ -166,73 +181,93 @@ Called only when `not qr_present and not ocr_high`. If QR is found or OCR scores
 
 `server.py` computes `ocr_db_name` and `ocr_db_score` (with L3 boost applied), then passes them to `consensus_check()`. `consensus.py` skips Stage 2 recalculation if these are provided. Do not revert this — the triple recalculation bug caused valid HIGH scores to be ignored.
 
-### calibration.json is shared between frontend and backend
+### calibration.json is shared — do not move it
 
-`frontend/src/utils/calibration.json` is read by both React (for display) and `backend/camera.py` (polled every 2 seconds). Do not move this file.
+`frontend/src/utils/calibration.json` is read by both React and `backend/camera.py` (polled every 2 seconds).
+
+### DashboardPage does not need a /stats endpoint
+
+It reads today's stats directly from the `history` prop passed from `App.jsx` (which loads from DB on mount). Do not add a separate `/stats` endpoint.
 
 ---
 
 ## 6. Next Steps (Priority Order)
 
-### IMMEDIATE — commit all changes
+### TODAY — Jun 5 — Frontend auth wiring
 
-```
-git add backend/database.py backend/server.py backend/pipeline/consensus.py
-git add frontend/src/App.jsx frontend/src/api/index.js frontend/src/pages/HistoryPage.jsx
-git commit -m "SQLite drug DB + persistent history + consensus score fix"
-```
+**`frontend/src/pages/LoginPage.jsx`**
+- Remove hardcoded `if username === "admin" && password === "1234"` check
+- POST `{username, password}` to `/auth/login`
+- On success: store `access_token` in `localStorage`
+- On failure: show error message
 
-### HIGH — Authentication (Week 3)
+**`frontend/src/api/index.js`**
+- Read token from `localStorage` on every call
+- Attach `Authorization: Bearer <token>` header to every `fetch()`
 
-Files to change:
-- `backend/database.py` — add `users` table
-- `backend/server.py` — add `POST /auth/login` endpoint returning JWT
-- `backend/server.py` — add JWT middleware dependency, protect all routes
-- `frontend/src/pages/LoginPage.jsx` — POST to real endpoint, store token in localStorage
-- `frontend/src/api/index.js` — attach `Authorization: Bearer` header to all requests
-- `frontend/src/App.jsx` — auth guard (redirect to /login if no token), handle 401, auto-logout timer
+### NEXT — Jun 8 — App.jsx auth guard + 401 handling
 
-Schema:
-```sql
-CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    username      TEXT    NOT NULL UNIQUE,
-    password_hash TEXT    NOT NULL,
-    role          TEXT    DEFAULT 'pharmacist'
-);
-```
+- Redirect to `/login` if no token in localStorage
+- Handle 401 globally — clear token and redirect
+- Wire sign-out button to clear localStorage
 
-Dependencies to install:
-```
-pip install python-jose[cryptography] passlib[bcrypt]
-```
+### NEXT — Jun 8 — Dashboard today-only filter
 
-### MEDIUM — Dashboard real stats
+- `DashboardPage.jsx` — filter the `history` prop to only entries where `timestamp` is today before computing stats
+- History page stays unchanged — still shows all records
 
-- Add `GET /stats` endpoint — query DB for today's scan count, pass rate, total drugs, weekly trend
-- Wire `DashboardPage.jsx` to fetch from `/stats`
-
-### MEDIUM — User management
-
-- Add admin-only `GET/POST/PUT/DELETE /users` endpoints
-- Replace Coming Soon tab in `MasterDataPage.jsx` with real CRUD table
-
-### MEDIUM — Auto-logout idle timer
+### NEXT — Jun 10 — Auto-logout idle timer
 
 - `App.jsx` — `useEffect` with `mousemove`/`keydown` listeners resetting 15-min timer
-- On timeout: clear token, redirect to login
+- On timeout: clear token, redirect to login, show toast
 
-### LOW — History Excel export
+### NEXT — Jun 11 — Image audit (ML)
 
-- `GET /history/export` — query all sessions, build `.xlsx` with `openpyxl`, return as file download
-- Add Export button in `HistoryPage.jsx`
+- Count images per class in `backend/data/medicine_images/`
+- Identify existing classes under 250 images
+- Confirm 12 new medicine boxes are available
+- Document gap list: class → current count → images needed
 
-### LOW — remaining
+### NEXT — Jun 12 — Medicine Code backend
 
-- Error toasts and loading spinners throughout
-- UI consistency check
-- README with setup instructions
-- Final smoke test and git tag
+**`backend/database.py`**
+```sql
+CREATE TABLE IF NOT EXISTS medicine_codes (
+    id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT
+);
+CREATE TABLE IF NOT EXISTS medicine_code_items (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    code_id   INTEGER NOT NULL REFERENCES medicine_codes(id) ON DELETE CASCADE,
+    drug_name TEXT    NOT NULL,
+    quantity  INTEGER DEFAULT 1
+);
+```
+- CRUD endpoints: `GET /medicine-codes`, `POST /medicine-codes`, `GET/PUT/DELETE /medicine-codes/{id}`, `POST /medicine-codes/{id}/items`, `DELETE /medicine-codes/{id}/items/{item_id}`
+
+### MEDIUM — Medicine Code frontend (Jun 15–17)
+
+- `MedicineCodePage.jsx` — new page, CRUD for codes, medicine picker from drug master data
+- `Sidebar.jsx` — add Medicine Code tab between Master Data and Setup
+- `ScanPage.jsx` / `ExpectedMedicines.jsx` — Load Code dropdown, auto-populates expected list
+
+### MEDIUM — User management (Jun 23)
+
+- `server.py` — admin-only `GET/POST/PUT/DELETE /users`, role check from JWT
+- `MasterDataPage.jsx` — replace Coming Soon with real CRUD table
+
+### MEDIUM — History Excel export (Jun 24)
+
+- `GET /history/export` — openpyxl, FileResponse
+- Export button in `HistoryPage.jsx`
+
+### ML — Layer 4 expansion to 20 classes (Jun 18–22)
+
+- Collect 250 images × 12 new medicine types (physical photography)
+- Manual annotation for all 12 new classes (auto-annotation cannot be used — model hasn't seen them)
+- Auto-annotate top-up images for existing 8 classes
+- Retrain YOLO, launch overnight Mon Jun 22
+- Validate and replace `med_box.pt` Tue Jun 23
 
 ---
 
@@ -240,22 +275,26 @@ pip install python-jose[cryptography] passlib[bcrypt]
 
 ### medverify.db must be in .gitignore
 
-The database file contains real scan data and drug names. Add it if not already there:
+Contains real scan data and hashed passwords:
 ```
 echo "backend/data/medverify.db" >> .gitignore
 ```
 
-### Uncommitted edits get lost
+### bcrypt must be pinned to 4.0.1
 
-When Claude edits a file in a chat session it is written to disk but NOT committed to git. Always commit after any session you want to keep.
+`pip install bcrypt==4.0.1` — passlib compatibility issue with newer bcrypt. Without this the server crashes on startup when `pwd_context.hash()` is called.
+
+### All new endpoints must have Depends(get_current_user)
+
+Every new `@app.get/post/put/delete` endpoint added to `server.py` must include `current_user = Depends(get_current_user)` as a parameter. The only exception is `POST /auth/login`.
 
 ### _reload_medicine_db() must be called after every drug mutation
 
-After any add/edit/delete drug operation, `_reload_medicine_db()` in `server.py` must be called to refresh the in-memory `medicine_db` list. It's already wired into all three mutation endpoints — do not remove it.
+After any add/edit/delete drug operation, `_reload_medicine_db()` in `server.py` must be called to refresh the in-memory `medicine_db` list.
 
 ### consensus.py — do not re-introduce Stage 2 recalculation
 
-The bug where valid OCR scores (e.g. 95) were being ignored and falling through to UNKNOWN was caused by `consensus.py` recalculating `ocr_db_score` from scratch. The fix was adding `ocr_db_name` and `ocr_db_score` as optional parameters. If you ever refactor `consensus.py`, preserve this pass-through behaviour.
+The fix was adding `ocr_db_name` and `ocr_db_score` as optional parameters. If you refactor `consensus.py`, preserve this pass-through behaviour.
 
 ### Camera autofocus DirectShow caveat
 
@@ -269,9 +308,9 @@ cap.set(cv2.CAP_PROP_FOCUS, cap.get(cv2.CAP_PROP_FOCUS))
 
 `frontend/src/utils/calibration.json` is read by both React and `backend/camera.py` (polled every 2 seconds).
 
-### History scanned_by always shows "admin" until real auth is built
+### History scanned_by will show real username once frontend auth is wired
 
-`App.jsx` reads `user?.username` from login state. Since login is hardcoded to admin/1234 it will always be "admin" until JWT auth is implemented.
+`App.jsx` reads `user?.username` from login state. Once `LoginPage.jsx` stores the decoded username from the JWT response, this will show the correct username.
 
 ### No hospital database access needed
 

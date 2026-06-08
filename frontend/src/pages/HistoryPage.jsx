@@ -128,6 +128,7 @@ export default function HistoryPage({ history }) {
                     <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-8">#</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date / Time</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Scanned By</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Location</th>
                     <th className="text-center px-4 py-3 text-xs font-semibold text-green-600 uppercase tracking-wider">✓ Matched</th>
                     <th className="text-center px-4 py-3 text-xs font-semibold text-red-500 uppercase tracking-wider">⚠ Missing</th>
                     <th className="text-center px-4 py-3 text-xs font-semibold text-amber-500 uppercase tracking-wider">× Extra</th>
@@ -162,6 +163,9 @@ export default function HistoryPage({ history }) {
                             </div>
                             <span className="text-sm font-medium truncate">{item.scanned_by || "—"}</span>
                           </div>
+                        </td>
+                        <td>
+                           <span className="text-sm font-medium truncate">{item.location || "—"}</span>
                         </td>
                         <td className="px-4 py-3.5 text-center font-semibold text-green-600">{item.matched}</td>
                         <td className="px-4 py-3.5 text-center font-semibold text-red-500">{item.missing}</td>

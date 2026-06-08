@@ -56,8 +56,8 @@ export default function SetupPage() {
   const [autoLogout,     setAutoLogout]     = useState(true);
   const [logoutSecs,     setLogoutSecs]     = useState(300);
   const [warnSecs,       setWarnSecs]       = useState(30);
-  const [hospitalName,   setHospitalName]   = useState("โรงพยาบาลตัวอย่าง");
-  const [hospitalCode,   setHospitalCode]   = useState("HOSP001");
+  const [hospitalName,   setHospitalName]   = useState(localStorage.getItem("hospital_name") || "โรงพยาบาลตัวอย่าง");
+  const [hospitalCode,   setHospitalCode]   = useState(localStorage.getItem("hospital_code") || "HOPS-1");
 
   const handleSave = async () => {
     setSaving(true);
@@ -71,6 +71,8 @@ export default function SetupPage() {
         y_offset:    yOffset,
         x_offset:    xOffset,
       });
+      localStorage.setItem("hospital_name", hospitalName)
+      localStorage.setItem("hospital_code", hospitalCode)
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {

@@ -10,22 +10,25 @@ import json
 import base64
 import tempfile
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 import time
 
 import cv2
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import OAuth2PasswordBearer
+
 from pydantic import BaseModel
 
 import camera as cam_module
-from database import init_db, get_db
+from database import init_db, get_db,pwd_context
+from jose import jwt, JWTError
 
 # ── Add project root so pipeline imports work ─────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -42,6 +45,10 @@ from pipeline.consensus import consensus_check
 
 os.makedirs(LOG_DIR, exist_ok=True)
 init_db()
+
+SECRET_KEY = 'abefkjhaekjfhkajef'
+ALGORITHM = "HS256"
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 # ── Calibration (written by image_taking/calibration.py) ──────────────────────
 _CALIB_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -62,6 +69,8 @@ def load_calibration() -> dict:
 print(f"  Calibration path : {os.path.abspath(_CALIB_PATH)}")
 print(f"  Calibration file exists: {os.path.exists(_CALIB_PATH)}")
 print(f"  Calibration: {load_calibration()}")
+
+
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 app = FastAPI(title="MedVerify API", version="2.0")
@@ -166,6 +175,11 @@ class CalibrationUpdate(BaseModel):
     y_offset:    int | None = None
     x_offset:    int | None = None
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 # ---- Database ------------    
 class DrugCreate(BaseModel):
     name: str
@@ -184,6 +198,7 @@ class ScanResultItem(BaseModel):
 class SaveHistroyPayload(BaseModel):
     timestamp:      str 
     scanned_by:     str | None =None
+    location:       str | None = None
     matched:        int = 0
     missing:        int = 0
     extra:          int = 0
@@ -201,17 +216,28 @@ def _reload_medicine_db():
     medicine_db = sorted(r["name"].upper() for r in rows)
     print(f"[DB] medicine_db reloaded - {len(medicine_db)} entries")
 
+
+def get_current_user(token = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token,SECRET_KEY,algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if username:
+            return {"sub" : payload["sub"], "role" : payload["role"]}
+        raise HTTPException(status_code=401, detail="no user found")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="decode failed")
+
 # ── Database Endpoint ─────────────────────────────────────────────────────────
 
 @app.get("/drug-database")
-def get_drug_database():
+def get_drug_database(current_user = Depends(get_current_user)):
     with get_db() as conn:
         rows = conn.execute("SELECT id, name FROM drugs ORDER BY name").fetchall()
     drugs = [{"id": r["id"], "name": r["name"]} for r in rows]
     return {"drugs": drugs, "total": len(drugs)}
 
 @app.post("/drug-database")
-def add_drug(payload: DrugCreate):
+def add_drug(payload: DrugCreate, current_user = Depends(get_current_user)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Drug name cannot be empty")
@@ -226,7 +252,7 @@ def add_drug(payload: DrugCreate):
     return get_drug_database()
 
 @app.delete("/drug-database/{drug_id}")
-def delete_drug(drug_id: int):
+def delete_drug(drug_id: int, current_user = Depends(get_current_user)):
     with get_db() as conn:
         cur = conn.execute("DELETE FROM drugs WHERE id = ?", (drug_id,))
         if cur.rowcount == 0:
@@ -235,7 +261,7 @@ def delete_drug(drug_id: int):
     return get_drug_database()
 
 @app.put("/drug-database/{drug_id}")
-def update_drug(drug_id: int, payload: DrugUpdate):
+def update_drug(drug_id: int, payload: DrugUpdate, current_user = Depends(get_current_user)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Drug id cannot be empty")
@@ -255,15 +281,16 @@ def update_drug(drug_id: int, payload: DrugUpdate):
 
 
 @app.post("/history")
-def save_history(payload: SaveHistroyPayload):
+def save_history(payload: SaveHistroyPayload, current_user = Depends(get_current_user)):
     with get_db() as conn:
         cur = conn.execute("""
             INSERT INTO scan_sessions               
-                (timestamp, scanned_by, matched, missing, extra, review, unknown, 
+                (timestamp, scanned_by, location ,matched, missing, extra, review, unknown, 
 annotated)
-            VALUES (?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?)
             """, (payload.timestamp,
                   payload.scanned_by,
+                  payload.location,
                   payload.matched,
                   payload.missing,
                   payload.extra,
@@ -291,7 +318,7 @@ qr_name)
 
 
 @app.get("/history")
-def get_history():
+def get_history(current_user = Depends(get_current_user)):
     with get_db() as conn:
         session = conn.execute(""" 
             SELECT * FROM scan_sessions ORDER BY id DESC
@@ -304,6 +331,7 @@ def get_history():
             "id":   s["id"],
             "timestamp":    s["timestamp"],
             "scanned_by":   s["scanned_by"],
+            "location":     s["location"],
             "matched":      s["matched"],
             "missing":      s["missing"],
             "extra":        s["extra"],
@@ -313,7 +341,7 @@ def get_history():
     return {"history": result, "total": len(result)}
 
 @app.get("/history/{session_id}")
-def get_history_detail(session_id: int):
+def get_history_detail(session_id: int, current_user = Depends(get_current_user)):
     with get_db() as conn:
         session = conn.execute(
             "SELECT * FROM scan_sessions WHERE id = ?", (session_id,)
@@ -347,6 +375,32 @@ def get_history_detail(session_id: int):
             for r in results
         ]
     }
+
+#----LoginEndpoints ───────────────────────────────────────────────────────────────────
+@app.post("/auth/login")
+def loginRequest(request: LoginRequest):
+    with get_db() as conn:
+        res = conn.execute("SELECT * FROM users WHERE username = ?", (request.username,)).fetchone()
+        if not res:
+            raise HTTPException(status_code=404, detail="no user found")
+        pas = pwd_context.verify(request.password, res["password_hash"])
+        if not pas:
+            raise HTTPException(status_code=401, detail="password worng")
+        payload = {
+            "sub" : res["username"],
+            "role" : res["role"],
+            "exp"  : datetime.utcnow() + timedelta(minutes=30)
+        }
+        token = jwt.encode(payload,SECRET_KEY,algorithm=ALGORITHM)
+    
+
+    return {"access_token": token, "token_type" : "bearer"}
+    
+
+
+
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def b64_to_frame(b64: str) -> np.ndarray:
@@ -362,13 +416,13 @@ def b64_to_frame(b64: str) -> np.ndarray:
 
 
 @app.get("/calibration")
-def get_calibration():
+def get_calibration(current_user = Depends(get_current_user)):
     """Return the current camera calibration values to the frontend."""
     return load_calibration()
 
 
 @app.post("/calibration")
-def update_calibration(update: CalibrationUpdate):
+def update_calibration(update: CalibrationUpdate, current_user = Depends(get_current_user)):
     """
     Write updated calibration values to calibration.json, then restart the
     cameras so the new resolution takes effect immediately.
@@ -538,19 +592,19 @@ def _get_qr_crop(det: dict,
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
-def health():
+def health(current_user = Depends(get_current_user)):
     return {"status": "ok", "db_entries": len(medicine_db)}
 
 
 # ── /medicines ────────────────────────────────────────────────────────────────
 
 @app.get("/medicines")
-def get_medicines():
+def get_medicines(current_user = Depends(get_current_user)):
     return {"medicines": expected_list}
 
 
 @app.post("/medicines")
-def set_medicines(payload: ExpectedListPayload):
+def set_medicines(payload: ExpectedListPayload, current_user = Depends(get_current_user)):
     global expected_list
     expected_list = [{"name": m.name.upper(), "quantity": m.quantity}
                      for m in payload.medicines]
@@ -558,7 +612,7 @@ def set_medicines(payload: ExpectedListPayload):
 
 
 @app.delete("/medicines")
-def clear_medicines():
+def clear_medicines(current_user = Depends(get_current_user)):
     global expected_list
     expected_list = []
     return {"medicines": []}
@@ -568,15 +622,7 @@ def clear_medicines():
 # ── /scan ─────────────────────────────────────────────────────────────────────
 
 @app.post("/scan")
-def scan(req: ScanRequest):
-    """
-    Main scan endpoint.
-    Receives one or two base64 PNG frames from the browser.
-    If two frames are provided they are stitched into a single 3840×1080
-    image before being passed to Layer 1 (imgsz=3840 preserves per-camera
-    resolution).  All downstream layers work on the stitched frame and its
-    coordinates — no per-camera x-offset bookkeeping needed.
-    """
+def scan(req: ScanRequest, current_user = Depends(get_current_user)):
 
     t_start = time.time()
     # Individual rotated frames — used by _get_qr_crop for Layer 2.
@@ -891,11 +937,11 @@ def scan(req: ScanRequest):
 
 
 @app.get("/scan/history")
-def get_history():
+def get_history(current_user = Depends(get_current_user)):
     return {"history": scan_history}
 
 
 @app.delete("/scan/history")
-def clear_history():
+def clear_history(current_user = Depends(get_current_user)):
     scan_history.clear()
     return {"history": []}
