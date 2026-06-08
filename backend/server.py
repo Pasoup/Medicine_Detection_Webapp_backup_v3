@@ -395,10 +395,64 @@ def loginRequest(request: LoginRequest):
     
 
     return {"access_token": token, "token_type" : "bearer"}
+
+
+
+#----UsersEndpoints ───────────────────────────────────────────────────────────────────
+
+@app.get("/users")
+def get_users(current_users = Depends(get_current_user)):
+    if current_users["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    with get_db() as conn:
+        rows = conn.execute("SELECT id, username, role FROM users").fetchall()
+    return {"users" : [dict(r) for r in rows]}
     
 
+@app.post("/users")
+def create_user(request: dict, current_user = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    hashed = pwd_context.hash(request["password"])
+    try:
+        with get_db() as conn:
+            conn.execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,?)",
+                (request["username"],hashed,request.get("role","pharmacist")))
+            conn.commit()
+
+    except Exception:
+        raise HTTPException(status_code=400, detail="Username already exist")
+    return {"ok": True}
 
 
+@app.put("/users/{user_id}")
+def update_users(user_id: int, request: dict, current_user = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access requried")
+    
+    with get_db() as conn:
+        if "password" in request:
+            hashed = pwd_context.hash(request["password"])
+            conn.execute("UPDATE users SET username=?, role=?, password_hash=? WHERE id=?",
+                         (request["username"],request["role"],hashed,user_id))
+            
+        else:
+            conn.execute("UPDATE users SET username=?, role=? WHERE id=?", 
+                         (request["username"], request["role"], user_id))
+        conn.commit()
+    return{"ok": True}
+
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int, current_user = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    with get_db() as conn:
+        conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        conn.commit()
+    return {"ok" : True}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
