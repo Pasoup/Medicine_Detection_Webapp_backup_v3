@@ -25,6 +25,17 @@ export default function App() {
   // ── Auth ──────────────────────────────────────────────────────────────────
   const [user, setUser] = useState(null);
 
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+
+    if(token)
+    {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      setUser({username: payload.sub, role: payload.role});
+
+    }
+  },[]);
+
   // ── Navigation ────────────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState("dashboard");
 
@@ -203,12 +214,14 @@ export default function App() {
   }, [expected, summary, scanResults, resetSession]);
 
   useEffect(() => {
+    if (!user) return;
+
     getHistory().then(data => {
       if(data.history) {
         setHistory(data.history);
       }
     });
-  }, [])
+  }, [user])
 
   // F5 = Complete & Save
   useEffect(() => {
@@ -230,7 +243,10 @@ export default function App() {
         onNavigate={setCurrentPage}
         historyCount={history.length}
         user={user}
-        onSignOut={() => setUser(null)}
+        onSignOut={() =>{
+          localStorage.removeItem("access_token")
+          setUser(null)
+        }}
       />
 
       {/* Main content — offset by sidebar width (w-56 = 224px) */}

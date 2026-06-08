@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { getDrugDatabase, addDrug, updateDrug, deleteDrug } from "../api/index";
+import { getDrugDatabase, addDrug, updateDrug, deleteDrug, getUsers, createUser,updateUser,deleteUser } from "../api/index";
 
 
 const TABS = [
@@ -34,12 +34,37 @@ export default function MasterDataPage() {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
 
+  //user states variables
+
+  const [users, setUsers]             = useState([]);
+  const [userLoading, setUserLoading] = useState(false);
+  const [userError, setUserError]     = useState(null);
+  const [userModal, setUserModal]     = useState(null);
+  const [userForm, setUserForm]       = useState({username: "", password: "", role: "pharmacist"});
+  const [userModalLoading, setUserModalLoading]   = useState(false);
+  const [userModalError, setUserModalError]       = useState(null);
+
+
+
+
   // Modal state: null | { type: "add" | "edit" | "remove", drug?: { id, name } }
   const [modal,        setModal]        = useState(null);
   const [modalName,    setModalName]    = useState("");
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError,   setModalError]   = useState(null);
   const inputRef = useRef(null);
+
+
+
+  useEffect(() => {
+    if (tab !== "users") return;
+    setUserLoading(true);
+    setUserError(null);
+    getUsers()
+    .then(data => setUsers(data.users || []))
+    .catch(err => setUserError(err.message))
+    .finally(() => setUserLoading(false));
+  }, [tab]);
 
   // Fetch real drug data from medicine_db.csv via the backend
   useEffect(() => {
@@ -74,6 +99,60 @@ export default function MasterDataPage() {
   const openEdit   = (drug) => { setModal({ type: "edit",   drug });  setModalName(drug.name);  setModalError(null); };
   const openRemove = (drug) => { setModal({ type: "remove", drug });  setModalError(null); };
   const closeModal = ()     => { setModal(null); setModalLoading(false); setModalError(null); };
+
+  const openAddUser    = ()     => { setUserModal({ type: "add" });          setUserForm({ username: "", password: "", role: "pharmacist" }); setUserModalError(null); };
+  const openEditUser   = (user) => { setUserModal({ type: "edit", user });   setUserForm({ username: user.username, password: "", role: user.role }); setUserModalError(null); };
+  const openRemoveUser = (user) => { setUserModal({ type: "remove", user }); setUserModalError(null); };
+  const closeUserModal = ()     => { setUserModal(null); setUserModalLoading(false); setUserModalError(null); };
+
+  const handleAddUser = async () => {
+    if (!userForm.username.trim() || !userForm.password.trim()) return;
+    setUserModalLoading(true);
+    setUserModalError(null);
+    try {
+      await createUser(userForm.username.trim(), userForm.password, userForm.role);
+      const data = await getUsers();
+      setUsers(data.users || []);
+      closeUserModal();
+    } catch (err) {
+      setUserModalError(err.message);
+      setUserModalLoading(false);
+    }
+  };
+
+  const handleEditUser = async () => {
+    if (!userForm.username.trim()) return;
+    setUserModalLoading(true);
+    setUserModalError(null);
+    try {
+      await updateUser(userModal.user.id, userForm.username.trim(), userForm.role, userForm.password);
+      setUsers(prev => prev.map(u => u.id === userModal.user.id
+        ? { ...u, username: userForm.username.trim(), role: userForm.role }
+        : u
+      ));
+      closeUserModal();
+    } catch (err) {
+      setUserModalError(err.message);
+      setUserModalLoading(false);
+    }
+  };
+
+  const handleRemoveUser = async () => {
+    setUserModalLoading(true);
+    setUserModalError(null);
+    try {
+      await deleteUser(userModal.user.id);
+      setUsers(prev => prev.filter(u => u.id !== userModal.user.id));
+      closeUserModal();
+    } catch (err) {
+      setUserModalError(err.message);
+      setUserModalLoading(false);
+    }
+  };
+
+
+
+
 
   const handleAdd = async () => {
     if (!modalName.trim()) return;
@@ -327,17 +406,98 @@ export default function MasterDataPage() {
         </div>
       )}
 
-      {/* Users tab */}
-      {tab === "users" && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
-          <svg className="w-8 h-8 mx-auto text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          <p className="text-slate-600 font-medium">User Management</p>
-          <p className="text-sm text-slate-400 mt-1">Coming soon — requires backend authentication API</p>
+    {/* Users tab */}
+    {tab === "users" && (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <button
+            onClick={openAddUser}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white
+                      font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add User
+          </button>
         </div>
-      )}
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {userLoading && (
+            <div className="flex items-center justify-center py-16 text-slate-400 gap-3">
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+              </svg>
+              <span className="text-sm">Loading users…</span>
+            </div>
+          )}
+
+          {!userLoading && userError && (
+            <div className="flex flex-col items-center justify-center py-16 text-red-400 gap-2">
+              <p className="text-sm font-medium">Could not load users</p>
+              <p className="text-xs text-red-300">{userError}</p>
+            </div>
+          )}
+
+          {!userLoading && !userError && users.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-300">
+              <p className="text-sm">No users found</p>
+            </div>
+          )}
+
+          {!userLoading && !userError && users.length > 0 && (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {["#", "Username", "Role", ""].map(h => (
+                    <th key={h} className="text-left px-5 py-3 text-xs font-semibold
+                                            text-slate-500 uppercase tracking-wider">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {users.map((user, idx) => (
+                  <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-5 py-3.5 text-xs text-slate-400 font-mono w-12">{idx + 1}</td>
+                    <td className="px-5 py-3.5 font-medium text-slate-700">{user.username}</td>
+                    <td className="px-5 py-3.5">
+                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full
+                        ${user.role === "admin"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-blue-100 text-blue-700"}`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openEditUser(user)}
+                          className="text-xs text-slate-500 hover:text-blue-600 font-medium
+                                    border border-slate-200 px-2.5 py-1 rounded-lg
+                                    hover:border-blue-300 transition-all"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => openRemoveUser(user)}
+                          className="text-xs font-medium border px-2.5 py-1 rounded-lg
+                                    transition-all text-red-500 border-red-200 hover:bg-red-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    )}
 
       {/* Roles tab */}
       {tab === "roles" && (
@@ -470,6 +630,140 @@ export default function MasterDataPage() {
                                transition-colors disabled:opacity-50"
                   >
                     {modalLoading && (
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                      </svg>
+                    )}
+                    Remove
+                  </button>
+                </div>
+              </>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* User Modal */}
+      {userModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && closeUserModal()}
+        >
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+
+            {/* Add / Edit */}
+            {(userModal.type === "add" || userModal.type === "edit") && (
+              <>
+                <h3 className="text-base font-bold text-slate-800 mb-4">
+                  {userModal.type === "add" ? "Add User" : "Edit User"}
+                </h3>
+
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Username
+                </label>
+                <input
+                  value={userForm.username}
+                  onChange={e => setUserForm(prev => ({ ...prev, username: e.target.value }))}
+                  placeholder="e.g. john"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm
+                             text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                />
+
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  {userModal.type === "edit" ? "New Password (leave blank to keep current)" : "Password"}
+                </label>
+                <input
+                  type="password"
+                  value={userForm.password}
+                  onChange={e => setUserForm(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm
+                             text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                />
+
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Role
+                </label>
+                <select
+                  value={userForm.role}
+                  onChange={e => setUserForm(prev => ({ ...prev, role: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm
+                             text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                >
+                  <option value="pharmacist">Pharmacist</option>
+                  <option value="admin">Admin</option>
+                </select>
+
+                {userModalError && (
+                  <p className="text-xs text-red-500 mb-3">{userModalError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={closeUserModal}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm
+                               font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={userModal.type === "add" ? handleAddUser : handleEditUser}
+                    disabled={userModalLoading}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                               bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold
+                               transition-colors disabled:opacity-50"
+                  >
+                    {userModalLoading && (
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                      </svg>
+                    )}
+                    {userModal.type === "add" ? "Add" : "Save"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Remove confirmation */}
+            {userModal.type === "remove" && (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Remove User</h3>
+                    <p className="text-xs text-slate-400">This cannot be undone</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-600 mb-4">
+                  Remove <span className="font-semibold text-slate-800">{userModal.user.username}</span>?
+                </p>
+                {userModalError && (
+                  <p className="text-xs text-red-500 mb-3">{userModalError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={closeUserModal}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm
+                               font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleRemoveUser}
+                    disabled={userModalLoading}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                               bg-red-500 hover:bg-red-600 text-white text-sm font-semibold
+                               transition-colors disabled:opacity-50"
+                  >
+                    {userModalLoading && (
                       <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>

@@ -1,7 +1,30 @@
 # MedVerify v3 — Session Handoff
 
-> Updated: 2026-06-04
+> Updated: 2026-06-09
 > Project root: C:\Users\pasul\Desktop\InternStuff\v3_webapp
+
+---
+
+## 0. How to Work With the User — READ FIRST
+
+**Do NOT write code unless the user explicitly tells you to.**
+The user writes all code themselves. Your role is to:
+- Point them in the right direction
+- Explain concepts when asked
+- Review code they paste and flag issues
+- Tell them exactly what to change, not write it for them
+
+**Do NOT open or read files unless the user asks or you need to review something specific.**
+
+**Do NOT make assumptions about what the user wants next.** Wait for them to tell you.
+
+When the user says "let's begin" or "start", guide them step by step — one small piece at a time. Wait for them to paste their attempt before reviewing.
+
+When the user shares code, check for:
+- Typos in property names (e.g. `headerss` instead of `headers` — this has happened before)
+- Wrong variable scope
+- Missing error handling
+- Logic bugs
 
 ---
 
@@ -19,7 +42,7 @@
 | Detection | YOLO OBB (Layer 1), QR decode (Layer 2), Tesseract OCR (Layer 3), YOLO Vision (Layer 4) |
 | Drug DB   | SQLite — backend/data/medverify.db                                                       |
 | History   | SQLite — scan_sessions + scan_results tables (persistent across restarts)                |
-| Auth      | JWT-based — backend fully protected. Frontend wiring is next (Jun 5).                   |
+| Auth      | JWT-based — backend fully protected, frontend fully wired as of Jun 5.                  |
 
 ### How to run
 
@@ -65,14 +88,14 @@ backend/
 ```
 frontend/src/
 ├── App.jsx                 # Root: auth gate, all state (history, scan, expected), nav
-├── api/index.js            # All fetch() calls to backend API — Bearer header NOT wired yet
+├── api/index.js            # All fetch() calls — token_helper() Bearer header on every call
 ├── pages/
-│   ├── LoginPage.jsx       # Login form — still hardcoded admin/1234, needs real POST next
+│   ├── LoginPage.jsx       # Login form — POSTs to /auth/login, stores JWT in localStorage
 │   ├── ScanPage.jsx        # Main scan UI — camera feed, expected list, results table
-│   ├── HistoryPage.jsx     # Scan history table with search/filter/pagination
-│   ├── DashboardPage.jsx   # Stats — reads real data from history prop (no /stats endpoint needed)
+│   ├── HistoryPage.jsx     # Scan history table — shows location column
+│   ├── DashboardPage.jsx   # Stats — reads real data from history prop
 │   ├── MasterDataPage.jsx  # Drug database CRUD + (placeholder) User/Role management
-│   └── SetupPage.jsx       # Camera resolution, calibration, brightness setup
+│   └── SetupPage.jsx       # Camera resolution, calibration, hospital info (saves to localStorage)
 ├── components/
 │   ├── Sidebar.jsx         # Fixed left nav with page links + sign out
 │   ├── ResultPopup.jsx     # Modal shown after each scan with matched/missing/extra
@@ -86,25 +109,35 @@ frontend/src/
 
 ---
 
-## 3. What Was Completed This Session (June 4, 2026)
+## 3. What Was Completed
 
-### Authentication — Backend (fully complete)
+### Jun 4 — Authentication Backend (fully complete)
 
-- **`users` table** added to `database.py` — `id`, `username` (UNIQUE), `password_hash`, `role` (DEFAULT 'pharmacist')
-- **Default admin seeded** — `INSERT OR IGNORE` seeds `admin` / bcrypt hash of `1234` / role `admin` on every `init_db()` call. Safe to run repeatedly.
-- **Dependencies installed** — `pip install python-jose[cryptography] passlib[bcrypt]` and `pip install bcrypt==4.0.1` (version pin required for passlib compatibility)
-- **`pwd_context`** — `CryptContext(schemes=["bcrypt"])` defined in `database.py`, imported into `server.py`
-- **`POST /auth/login`** — accepts `LoginRequest(username, password)`, verifies bcrypt hash, returns `{"access_token": JWT, "token_type": "bearer"}`. JWT payload: `{"sub": username, "role": role, "exp": now + 30min}`
-- **`get_current_user()` dependency** — decodes Bearer token, extracts `sub`, raises 401 on invalid/expired. Uses `OAuth2PasswordBearer(tokenUrl="/auth/login")` + `Depends()`
-- **All 18 endpoints protected** — `current_user = Depends(get_current_user)` added to every endpoint except `POST /auth/login`
-- **Verified working** — unauthenticated requests to `/drug-database` return 401. Valid login returns a unique JWT that expires after 30 minutes.
+- `users` table in `database.py` with bcrypt-hashed admin seed
+- `POST /auth/login` — verifies hash, returns JWT (30-min expiry)
+- `get_current_user()` JWT middleware — all 18 endpoints protected except `/auth/login`
+
+### Jun 5 — Frontend Auth Wiring (fully complete)
+
+- `LoginPage.jsx` — real `POST /auth/login`, stores `access_token` in `localStorage`, calls `onLogin({ username, role })`
+- `api/index.js` — `token_helper()` reads token from localStorage, returns `{ Authorization: Bearer ..., Content-Type: application/json }`. Applied to every `fetch()` call.
+- `/video_feed` intentionally left unprotected — MJPEG stream loads via `<img src>`, cannot carry headers
+- `onLogin` in `App.jsx` receives `{ username, role }` object — `user.username` now shows correctly in History
+
+### Jun 5 — Hospital Location Feature (fully complete)
+
+- `SetupPage.jsx` — reads `hospital_name` / `hospital_code` from `localStorage` on init; saves both on "Save Settings"
+- `database.py` — `location TEXT` column added to `scan_sessions` (ALTER TABLE also run on existing DB)
+- `server.py` — `SaveHistoryPayload` has `location: str | None = None`; inserted in `POST /history`; returned in `GET /history`
+- `App.jsx` — reads `localStorage.getItem("hospital_name")` and includes it as `location` in both `handleCloseAndReview()` and `handleComplete()`
+- `HistoryPage.jsx` — displays `item.location` in the Location column
 
 ### Previously completed (prior sessions)
 
 - SQLite drug DB (stable AUTOINCREMENT IDs, no row-shift bug)
 - Persistent scan history (scan_sessions + scan_results)
 - OCR consensus score fix (eliminated triple-recalculation bug)
-- DashboardPage already reads real data from history prop
+- DashboardPage reads real data from history prop
 
 ---
 
@@ -120,29 +153,45 @@ frontend/src/
 - Drug database CRUD against SQLite (stable IDs, no row-shift bug)
 - Scan history persistent — survives page refresh and server restart
 - History detail popup loads from DB — annotated image + all result rows
-- **JWT authentication backend** — login endpoint, token generation, middleware, all routes protected
+- **JWT authentication — fully wired frontend + backend**
+- **Hospital location saved to scan history**
 - Perspective/straightening calibration on detected crops (Layer 1)
 - Camera resolution and calibration setup page
 - Camera autofocus lock on both cameras
 
+### Jun 8 — Auth Guard + 401 Handling (fully complete)
+
+- `App.jsx` — `useEffect` on mount restores user from JWT in localStorage (survives page refresh)
+- `api/index.js` — `auth_fetch()` wraps all fetch calls, auto-attaches Bearer token, redirects to login on 401
+- `App.jsx` — sign-out clears `access_token` from localStorage before resetting user state
+- `getHistory` useEffect depends on `[user]` so it only loads after login
+
+### Jun 8 — Dashboard Today Filter (fully complete)
+
+- `DashboardPage.jsx` — stats and recent activity filtered to today's entries only
+
+### Jun 9 — User Management (fully complete)
+
+- `server.py` — 4 admin-only endpoints: `GET /users`, `POST /users`, `PUT /users/{id}`, `DELETE /users/{id}`
+- All protected by role check — returns 403 if not admin, passwords hashed with bcrypt
+- `api/index.js` — `getUsers`, `createUser`, `updateUser`, `deleteUser` functions added
+- `MasterDataPage.jsx` — replaced "Coming Soon" with full user CRUD table + add/edit/remove modals
+
 ### Known Issues / Still To Build
 
-- **Frontend auth not wired** — LoginPage.jsx still uses hardcoded check, api/index.js does not attach Bearer header. This is the NEXT task (Jun 5).
-- **Auth guard not in frontend** — no redirect to /login if no token, no 401 handling
-- **Auto-logout idle timer** — not wired up yet
+- **Auto-logout idle timer** — not wired up yet (Jun 9 remaining / Jun 10)
 - **Medicine Code feature** — new tab + DB tables + ScanPage dropdown not built yet
-- **User management in MasterData** — Coming soon placeholder only
 - **History export** — no Excel download yet
-- **Layer 4 only handles 8 medicine types** — plan to expand to 20 types (12 new classes, 250 images each, manual annotation required for new classes)
+- **Layer 4 only handles 8 medicine types** — plan to expand to 20 types
 - **Ambient light sensitivity** — software offset partially compensates but hardware lighting needs improvement
 
 ---
 
 ## 5. Active Decisions
 
-### JWT auth — backend only, frontend is next
+### JWT auth — fully wired
 
-Backend is fully protected. Frontend still uses hardcoded login. Do not add any more backend endpoints without also adding `Depends(get_current_user)`.
+Backend protected. Frontend wired. `token_helper()` in `api/index.js` handles all Bearer headers.
 
 ### JWT constants in server.py
 
@@ -155,7 +204,7 @@ Token expiry: 30 minutes. Payload contains `sub` (username), `role`, `exp`.
 
 ### bcrypt version must be pinned
 
-`passlib` has a compatibility bug with newer `bcrypt`. Pin: `pip install bcrypt==4.0.1`. Without this, `pwd_context.hash()` throws a ValueError on startup.
+`pip install bcrypt==4.0.1` — passlib compatibility issue with newer bcrypt. Without this the server crashes on startup when `pwd_context.hash()` is called.
 
 ### SQLite is the database — medverify.db lives in backend/data/
 
@@ -187,39 +236,25 @@ Called only when `not qr_present and not ocr_high`. If QR is found or OCR scores
 
 ### DashboardPage does not need a /stats endpoint
 
-It reads today's stats directly from the `history` prop passed from `App.jsx` (which loads from DB on mount). Do not add a separate `/stats` endpoint.
+It reads stats directly from the `history` prop passed from `App.jsx`. Do not add a separate `/stats` endpoint.
+
+### Hospital info stored in localStorage
+
+`hospital_name` and `hospital_code` keys in localStorage. Set by SetupPage on save, read by App.jsx when building scan session entries.
+
+### /video_feed is intentionally unprotected
+
+MJPEG stream is loaded via `<img src>` tag — browsers cannot attach custom headers to image src URLs. Removing auth from this endpoint is correct and intentional.
 
 ---
 
 ## 6. Next Steps (Priority Order)
 
-### TODAY — Jun 5 — Frontend auth wiring
-
-**`frontend/src/pages/LoginPage.jsx`**
-- Remove hardcoded `if username === "admin" && password === "1234"` check
-- POST `{username, password}` to `/auth/login`
-- On success: store `access_token` in `localStorage`
-- On failure: show error message
-
-**`frontend/src/api/index.js`**
-- Read token from `localStorage` on every call
-- Attach `Authorization: Bearer <token>` header to every `fetch()`
-
-### NEXT — Jun 8 — App.jsx auth guard + 401 handling
-
-- Redirect to `/login` if no token in localStorage
-- Handle 401 globally — clear token and redirect
-- Wire sign-out button to clear localStorage
-
-### NEXT — Jun 8 — Dashboard today-only filter
-
-- `DashboardPage.jsx` — filter the `history` prop to only entries where `timestamp` is today before computing stats
-- History page stays unchanged — still shows all records
-
 ### NEXT — Jun 10 — Auto-logout idle timer
 
-- `App.jsx` — `useEffect` with `mousemove`/`keydown` listeners resetting 15-min timer
-- On timeout: clear token, redirect to login, show toast
+- `App.jsx` — `useEffect` with `mousemove`/`keydown` listeners resetting 10-min timer
+- On timeout: clear token from localStorage, redirect to login
+- Frontend-only approach — no backend refresh endpoint needed
 
 ### NEXT — Jun 11 — Image audit (ML)
 
@@ -251,7 +286,7 @@ CREATE TABLE IF NOT EXISTS medicine_code_items (
 - `Sidebar.jsx` — add Medicine Code tab between Master Data and Setup
 - `ScanPage.jsx` / `ExpectedMedicines.jsx` — Load Code dropdown, auto-populates expected list
 
-### MEDIUM — User management (Jun 23)
+### MEDIUM — User management (Jun 9) — moved up from Jun 23
 
 - `server.py` — admin-only `GET/POST/PUT/DELETE /users`, role check from JWT
 - `MasterDataPage.jsx` — replace Coming Soon with real CRUD table
@@ -308,9 +343,9 @@ cap.set(cv2.CAP_PROP_FOCUS, cap.get(cv2.CAP_PROP_FOCUS))
 
 `frontend/src/utils/calibration.json` is read by both React and `backend/camera.py` (polled every 2 seconds).
 
-### History scanned_by will show real username once frontend auth is wired
+### Watch for typos in api/index.js
 
-`App.jsx` reads `user?.username` from login state. Once `LoginPage.jsx` stores the decoded username from the JWT response, this will show the correct username.
+`headerss` (double s) has caused silent failures before — always check fetch() calls use `headers` (singular).
 
 ### No hospital database access needed
 

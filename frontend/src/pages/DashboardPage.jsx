@@ -26,7 +26,7 @@ export default function DashboardPage({ history, onNavigate }) {
                 : Math.round((todayItems.filter(h => getStatusKey(h) === "ok").length / todayItems.length) * 100) + "%",
   };
 
-  const recent = history.slice(0, 8);
+  const recent = todayItems.slice(0, 8);
 
   return (
     <div className="p-6 space-y-6">
