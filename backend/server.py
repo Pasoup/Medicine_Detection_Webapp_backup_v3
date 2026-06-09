@@ -188,12 +188,13 @@ class DrugUpdate(BaseModel):
     name: str
 
 class ScanResultItem(BaseModel):
-    box_id:         str | None = None
-    final_name:     str | None = None
-    scan_status:    str | None = None
-    confidence:     str | None = None
-    ocr_raw:        str | None = None
-    qr_name:        str | None = None
+    box_id:          str | None = None
+    final_name:      str | None = None
+    scan_status:     str | None = None
+    confidence:      str | None = None
+    ocr_raw:         str | None = None
+    qr_name:         str | None = None
+    reference_image: str | None = None
 
 class SaveHistroyPayload(BaseModel):
     timestamp:      str 
@@ -302,9 +303,9 @@ annotated)
         for r in payload.results:
             conn.execute(""" 
                 INSERT INTO scan_results
-                         (session_id, box_id, final_name,scan_status,confidence,ocr_raw,
-qr_name)
-                VALUES (?,?,?,?,?,?,?)
+                         (session_id, box_id, final_name, scan_status, confidence, ocr_raw,
+                          qr_name, reference_image)
+                VALUES (?,?,?,?,?,?,?,?)
             """, (
                 session_id,
                 r.box_id,
@@ -312,7 +313,8 @@ qr_name)
                 r.scan_status,
                 r.confidence,
                 r.ocr_raw,
-                r.qr_name
+                r.qr_name,
+                r.reference_image,
             ))
     return {"id" : session_id, "status" : "saved"}
 
@@ -365,12 +367,13 @@ def get_history_detail(session_id: int, current_user = Depends(get_current_user)
         "annotated":  session["annotated"],
         "results": [
             {
-                "box_id":      r["box_id"],
-                "final_name":  r["final_name"],
-                "scan_status": r["scan_status"],
-                "confidence":  r["confidence"],
-                "ocr_raw":     r["ocr_raw"],
-                "qr_name":     r["qr_name"],
+                "box_id":          r["box_id"],
+                "final_name":      r["final_name"],
+                "scan_status":     r["scan_status"],
+                "confidence":      r["confidence"],
+                "ocr_raw":         r["ocr_raw"],
+                "qr_name":         r["qr_name"],
+                "reference_image": r["reference_image"],
             }
             for r in results
         ]

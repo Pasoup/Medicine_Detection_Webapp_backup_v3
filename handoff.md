@@ -176,6 +176,12 @@ frontend/src/
 - All protected by role check — returns 403 if not admin, passwords hashed with bcrypt
 - `api/index.js` — `getUsers`, `createUser`, `updateUser`, `deleteUser` functions added
 - `MasterDataPage.jsx` — replaced "Coming Soon" with full user CRUD table + add/edit/remove modals
+- Role dropdown supports 3 roles: `admin`, `pharmacist`, `viewer`
+- Role badge colors: admin = purple, pharmacist = blue, viewer = slate
+
+### Jun 9 — Bug Fixes
+
+- `LoginPage.jsx` — role was hardcoded to `"Administrator"`. Fixed to decode role from JWT payload on login so sidebar shows the correct role
 
 ### Known Issues / Still To Build
 
@@ -250,11 +256,17 @@ MJPEG stream is loaded via `<img src>` tag — browsers cannot attach custom hea
 
 ## 6. Next Steps (Priority Order)
 
-### NEXT — Jun 10 — Auto-logout idle timer
+### TODAY — Jun 9 (remaining) — Auto-logout idle timer ✅
 
-- `App.jsx` — `useEffect` with `mousemove`/`keydown` listeners resetting 10-min timer
-- On timeout: clear token from localStorage, redirect to login
-- Frontend-only approach — no backend refresh endpoint needed
+- `App.jsx` — `useEffect` with `mousemove`/`keydown` listeners resetting a 30-min timer
+- On timeout: `localStorage.removeItem("access_token")` then `setUser(null)`
+- Frontend-only — no backend changes needed
+
+### TODAY — Jun 9 (afternoon) — Role-based UI access
+
+- Restrict what each role can see/access in the frontend based on `user.role`
+- Roles: `admin`, `pharmacist`, `viewer`
+- Decide which pages and actions each role can access (e.g. admin-only: Master Data user management; viewer: read-only)
 
 ### NEXT — Jun 11 — Image audit (ML)
 

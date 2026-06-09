@@ -35,6 +35,28 @@ export default function App() {
 
     }
   },[]);
+// --- TIMER ──────────────────────────────────────────────────────────────────
+  const idleTimerRef = useRef(null)
+
+  useEffect(() => {
+   const resetTimer = () => {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        localStorage.removeItem("access_token");
+        setUser(null);
+      },30 * 60 * 1000)
+   }; 
+   window.addEventListener("mousemove", resetTimer)
+   window.addEventListener("keydown", resetTimer)
+   resetTimer()
+    return () => {
+      clearTimeout(idleTimerRef.current);
+      window.removeEventListener("mousemove", resetTimer)
+      window.removeEventListener("keydown", resetTimer)
+    };
+
+  }, []);
+
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState("dashboard");
@@ -67,6 +89,7 @@ export default function App() {
     sessionAnnotated.current = data.annotated_b64;
 
     const expectedMap = {};
+    console.log("backend results:", data.results);
     for (const e of expected) {
       const n = (typeof e === "string" ? e : e.name).toUpperCase();
       const q = typeof e === "string" ? 1 : (e.quantity || 1);
@@ -107,7 +130,7 @@ export default function App() {
           status: "❌ Not detected", scan_status: "MISSING",
           ocr_raw: "", qr_name: null,
           reference_image: data.results.find(
-            r => r.final_name?.toUpperCase() === name && r.reference_image
+            r => r.final_name?.toUpperCase() === name && r.scan_status === "MISSING"
           )?.reference_image || null,
           qty_expected: qtyNeeded, qty_found: qtyFound,
           qty_missing: qtyMissing, unit_index: i + 1,
@@ -161,12 +184,13 @@ export default function App() {
             unknown:    data.summary.unknown || 0,
             annotated:  sessionAnnotated.current || data.annotated_b64,
             results:    data.results.map(r => ({
-                box_id:      r.box_id?.toString() || null,
-                final_name:  r.final_name,
-                scan_status: r.scan_status,
-                confidence:  r.confidence,
-                ocr_raw:     r.ocr_raw,
-                qr_name:     r.qr_name,
+                box_id:          r.box_id?.toString() || null,
+                final_name:      r.final_name,
+                scan_status:     r.scan_status,
+                confidence:      r.confidence,
+                ocr_raw:         r.ocr_raw,
+                qr_name:         r.qr_name,
+                reference_image: r.reference_image || null,
             })),
         };
         saveHistory(entry).then(saved => {
@@ -174,6 +198,7 @@ export default function App() {
         });
     }
     resetSession();
+    setScanResults(null);
     setShowPopup(false);
     setPopupData(null);
   }, [popupData, resetSession]);
@@ -195,12 +220,13 @@ export default function App() {
         unknown:    summary.unknown || 0,
         annotated:  sessionAnnotated.current || null,
         results:    (scanResults || []).map(r => ({
-            box_id:      r.box_id?.toString() || null,
-            final_name:  r.final_name,
-            scan_status: r.scan_status,
-            confidence:  r.confidence,
-            ocr_raw:     r.ocr_raw,
-            qr_name:     r.qr_name,
+            box_id:          r.box_id?.toString() || null,
+            final_name:      r.final_name,
+            scan_status:     r.scan_status,
+            confidence:      r.confidence,
+            ocr_raw:         r.ocr_raw,
+            qr_name:         r.qr_name,
+            reference_image: r.reference_image || null,
         })),
     };
     saveHistory(entry).then(saved => {

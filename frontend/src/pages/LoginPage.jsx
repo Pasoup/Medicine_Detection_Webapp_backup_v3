@@ -27,7 +27,8 @@ export default function LoginPage({ onLogin }) {
       setLoading(false)
       console.log( "acess tokensssss: "+ data.access_token)
       localStorage.setItem("access_token", data.access_token)
-      onLogin({username : username, role: "Administrator"})
+      const payload = JSON.parse(atob(data.access_token.split(".")[1]))
+      onLogin({username : payload.sub, role: payload.role})
     })
     .catch(err => {
       setLoading(false)

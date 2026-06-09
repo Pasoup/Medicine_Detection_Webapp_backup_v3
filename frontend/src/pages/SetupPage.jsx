@@ -27,14 +27,6 @@ const SETUP_TABS = [
         d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
   )},
-  { id: "database", label: "Database", icon: (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M4 12c0 2.21 3.582 4 8 4s8-1.79 8-4" />
-    </svg>
-  )},
 ];
 
 export default function SetupPage() {
@@ -282,14 +274,6 @@ export default function SetupPage() {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                    FPS
-                  </label>
-                  <input type="number" defaultValue={30}
-                    className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm
-                               text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
               </div>
             </div>
           ))}
@@ -297,59 +281,6 @@ export default function SetupPage() {
         </div>
       )}
 
-      {/* Database tab */}
-      {tab === "database" && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
-            </svg>
-            Database Connection
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {[
-              { label: "DB Host",        defaultVal: "192.168.1.100", type: "text"     },
-              { label: "Port",           defaultVal: "1433",          type: "number"   },
-              { label: "Database Name",  defaultVal: "MedCheckDB",    type: "text"     },
-              { label: "Username",       defaultVal: "sa",            type: "text"     },
-              { label: "Password",       defaultVal: "",              type: "password" },
-            ].map(({ label, defaultVal, type }) => (
-              <div key={label}>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  {label}
-                </label>
-                <input type={type} defaultValue={defaultVal}
-                  className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm
-                             text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-            ))}
-            <div className="flex items-end">
-              <button
-                onClick={testDb}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border
-                           border-slate-200 rounded-xl text-sm font-medium text-slate-600
-                           hover:bg-slate-50 transition-colors"
-              >
-                {dbStatus === "testing" ? (
-                  <><div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                  Testing…</>
-                ) : (
-                  <>🔌 Test Connection</>
-                )}
-              </button>
-            </div>
-          </div>
-          {dbStatus === "ok" && (
-            <p className="mt-4 text-sm text-green-600 flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Connection successful — database is ready
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

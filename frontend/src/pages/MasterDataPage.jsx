@@ -467,7 +467,10 @@ export default function MasterDataPage() {
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full
                         ${user.role === "admin"
                           ? "bg-purple-100 text-purple-700"
-                          : "bg-blue-100 text-blue-700"}`}>
+                          : user.role === "viwer"
+                            ? "bg-slate-100 text-slate-600"
+                            : "bg-blue-100 text-blue-700"
+                        }`}>
                         {user.role}
                       </span>
                     </td>
@@ -515,8 +518,8 @@ export default function MasterDataPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {[
-                { name: "Administrator", dashboard: true,  scan: true,  history: true,  master: true,  setup: true  },
-                { name: "Pharmacist",    dashboard: true,  scan: true,  history: true,  master: false, setup: false },
+                { name: "Administrator", dashboard: true,  scan: true,  history: true,  master: true,  setup: true },
+                { name: "Pharmacist",    dashboard: true,  scan: true,  history: true,  master: true, setup: false },
                 { name: "Viewer",        dashboard: true,  scan: false, history: true,  master: false, setup: false },
               ].map((role, i) => (
                 <tr key={role.name} className="hover:bg-slate-50">
@@ -693,8 +696,9 @@ export default function MasterDataPage() {
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm
                              text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                 >
-                  <option value="pharmacist">Pharmacist</option>
-                  <option value="admin">Admin</option>
+                  <option value="Pharmacist">Pharmacist</option>
+                  <option value="Admin">Admin</option>
+                  <option value="Viewer">Viewer</option>
                 </select>
 
                 {userModalError && (

@@ -31,14 +31,15 @@ def init_db() -> None:
             );
             
             CREATE TABLE IF NOT EXISTS scan_results(
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id  INTEGER NOT NULL REFERENCES scan_sessions(id),
-                box_id      TEXT,
-                final_name  TEXT,
-                scan_status TEXT,
-                confidence  TEXT,
-                ocr_raw     TEXT,
-                qr_name     TEXT
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id      INTEGER NOT NULL REFERENCES scan_sessions(id),
+                box_id          TEXT,
+                final_name      TEXT,
+                scan_status     TEXT,
+                confidence      TEXT,
+                ocr_raw         TEXT,
+                qr_name         TEXT,
+                reference_image TEXT
             );
             
             CREATE TABLE IF NOT EXISTS users (
