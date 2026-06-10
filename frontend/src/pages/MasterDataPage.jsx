@@ -26,7 +26,7 @@ const TABS = [
 
 const PAGE_SIZE = 10;
 
-export default function MasterDataPage() {
+export default function MasterDataPage({user}) {
   const [tab,     setTab]     = useState("drugs");
   const [search,  setSearch]  = useState("");
   const [page,    setPage]    = useState(1);
@@ -218,7 +218,7 @@ export default function MasterDataPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-        {TABS.map(({ id, label, icon }) => (
+       {TABS.filter(({id}) => id === "drugs" || user?.role === "admin").map(({id,label,icon}) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -696,9 +696,9 @@ export default function MasterDataPage() {
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm
                              text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                 >
-                  <option value="Pharmacist">Pharmacist</option>
-                  <option value="Admin">Admin</option>
-                  <option value="Viewer">Viewer</option>
+                  <option value="pharmacist">Pharmacist</option>
+                  <option value="admin">Admin</option>
+                  <option value="viewer">Viewer</option>
                 </select>
 
                 {userModalError && (

@@ -17,6 +17,7 @@ const PAGE_TITLES = {
   dashboard: "Dashboard",
   scan:      "Scan Medicines",
   history:   "Scan History",
+  code:      "Medicine Code",
   master:    "Master Data",
   setup:     "Setup",
 };
@@ -315,7 +316,7 @@ export default function App() {
           {currentPage === "history" && (
             <HistoryPage history={history} />
           )}
-          {currentPage === "master" && <MasterDataPage />}
+          {currentPage === "master" && <MasterDataPage user={user}/>}
           {currentPage === "setup"  && <SetupPage />}
         </main>
       </div>

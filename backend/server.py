@@ -110,13 +110,7 @@ app.mount("/medicine-images", StaticFiles(directory=MEDICINE_IMAGES_DIR),
 
 
 def find_medicine_image(name: str) -> str | None:
-    """
-    Find a reference image for a medicine by fuzzy-matching the filename
-    against the medicine name.  Returns the URL path if found, else None.
-
-    Normalisation: lowercase, strip spaces/hyphens so
-    "IMPURIN 50" matches "Impurin50.jpg" and "impurin-50.png".
-    """
+    
     if not name or not os.path.exists(MEDICINE_IMAGES_DIR):
         return None
 
@@ -207,8 +201,14 @@ class SaveHistroyPayload(BaseModel):
     unknown:        int = 0
     annotated:      str | None = None
     results:        list[ScanResultItem] = []
+# ---- Med Codes------------
 
+class MedCodes(BaseModel):
+    label:      str    
 
+class MedCodesItem(BaseModel):
+    drug_name: str
+    quantity: int = 1
 
 def _reload_medicine_db():
     global medicine_db
@@ -278,6 +278,97 @@ def update_drug(drug_id: int, payload: DrugUpdate, current_user = Depends(get_cu
         raise HTTPException(status_code=400, detail=f"'{name}' already exists")
     _reload_medicine_db()
     return get_drug_database()
+
+
+# ── MedicineCodes Endpoint ─────────────────────────────────────────────────────────
+
+@app.get("/medicine-codes")
+def get_medicine_codes(current_user = Depends(get_current_user)):
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM medicine_codes").fetchall()
+    
+    return [{"id" : row["id"], "label": row["label"]} for row in rows]
+
+
+@app.post("/medicine-codes")
+def add_medicine_codes(payload : MedCodes,current_user = Depends(get_current_user)):
+    name = payload.label.strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Label Name cannot be empty")
+
+    with get_db() as conn:
+        cur  = conn.execute("INSERT INTO medicine_codes(label) VALUES(?)", (name,))
+
+    return( {"id" : cur.lastrowid, "label" : name})
+
+
+@app.get("/medicine-codes/{med_code_id}")
+def get_med_code_one(med_code_id: int,current_user = Depends(get_current_user)):
+    with get_db() as conn:
+        cur = conn.execute("SELECT * FROM medicine_codes WHERE id = ?", (med_code_id,)).fetchone()
+        if not cur:
+            raise HTTPException(status_code=404, detail="Medicine code not found")
+        cur2 = conn.execute("SELECT * FROM medicine_code_items WHERE code_id = ?",(med_code_id,)).fetchall()
+
+    return {
+        "id" : cur["id"],
+        "label" : cur["label"],
+        "items" : [{"id" : row["id"], "drug_name" : row["drug_name"], "quantity" : row["quantity"]} for row in cur2]
+
+    }
+
+@app.put("/medicine-codes/{med_code_id}")
+def update_medicine_code(med_code_id: int,payload: MedCodes, current_user = Depends(get_current_user)):
+    name = payload.label.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="label name cannot be empty")
+    
+    with get_db() as conn:
+        exist = conn.execute("SELECT id FROM medicine_codes WHERE id = ?", (med_code_id,)).fetchone()
+        if not exist:
+            raise HTTPException(status_code=404, detail="Med code doesn't exist")
+        cur = conn.execute("UPDATE medicine_codes SET label = ? WHERE id = ?", (name,med_code_id))
+
+    return {"id" : med_code_id, "label" : name}
+
+
+@app.delete("/medicine-codes/{med_code_id}")
+def delete_medicine_code(med_code_id: int, current_user = Depends(get_current_user)):
+    with get_db() as conn:
+        exist = conn.execute("SELECT id FROM medicine_codes WHERE id = ?", (med_code_id,)).fetchone()
+        if not exist:
+            raise HTTPException(status_code=404, detail="Med code not found")
+        cur = conn.execute("DELETE FROM medicine_codes WHERE id = ?", (med_code_id,))
+    return {"detail" : "deleted"}
+
+# ── MedCode ITEM Endpoint ─────────────────────────────────────────────────────────
+
+@app.post("/medicine-codes/{med_code_id}/items")
+def add_medcode_item(med_code_id : int, payload: MedCodesItem,current_user = Depends(get_current_user)):
+    with get_db() as conn:
+        exist = conn.execute("SELECT id FROM medicine_codes WHERE id = ?", (med_code_id,)).fetchone()
+        if not exist:
+            raise HTTPException(status_code=404, detail="Med code doesn't exist")
+        cur = conn.execute("INSERT INTO medicine_code_items(code_id, drug_name,quantity) VALUES(?,?,?)", (med_code_id,payload.drug_name,payload.quantity))
+
+    return {"id" : cur.lastrowid, "drug_name": payload.drug_name, "quantity": payload.quantity}
+
+
+@app.delete("/medicine-codes/{med_code_id}/items/{item_id}")
+def delete_med_code_item(med_code_id: int, item_id: int, current_user = Depends(get_current_user)):
+    with get_db() as conn:
+        exist_med_code = conn.execute("SELECT id FROM medicine_codes WHERE id = ?", (med_code_id, )).fetchone()
+        if not exist_med_code:
+            raise HTTPException(status_code=404, detail="Med Code doesn't exist")
+        exist_item = conn.execute("SELECT id from medicine_code_items WHERE id = ?", (item_id,)).fetchone()
+        if not exist_item:
+            raise HTTPException(status_code=404, detail="item code doesn't exist")
+        conn.execute("DELETE FROM medicine_code_items WHERE id = ?", (item_id,))
+    return ({"detail" : "deleted"})
+
+
+# ── Histroy Endpoint ─────────────────────────────────────────────────────────
 
 
 

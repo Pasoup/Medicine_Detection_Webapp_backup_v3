@@ -199,7 +199,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Updated: June 4, 2026</w:t>
+              <w:t xml:space="preserve">Updated: June 9, 2026</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -2320,7 +2320,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Admin-only GET / POST / PUT / DELETE /users endpoints; validate role from JWT</w:t>
+              <w:t xml:space="preserve">DONE ✓ — Admin-only GET / POST / PUT / DELETE /users endpoints; validate role from JWT</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -4166,7 +4166,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Auto-logout idle timer — mousemove/keydown listeners reset 15-min timer; timeout clears token</w:t>
+              <w:t xml:space="preserve">DONE ✓ — Auto-logout idle timer — mousemove/keydown listeners reset 15-min timer; timeout clears token</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -4734,7 +4734,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Replace Users tab Coming Soon with real CRUD table (admin only)</w:t>
+              <w:t xml:space="preserve">DONE ✓ — Replace Users tab Coming Soon with real CRUD table (admin only)</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -5370,7 +5370,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Pharmacist vs admin role controls which pages/actions are visible</w:t>
+              <w:t xml:space="preserve">DONE ✓ — Pharmacist vs admin role controls which pages/actions are visible</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -6480,13 +6480,17 @@
             <w:vAlign w:val="center"/>
           </w:tcPr>
           <w:p>
-            <w:pPr><w:jc w:val="left"/></w:pPr>
+            <w:pPr>
+              <w:jc w:val="left"/>
+            </w:pPr>
             <w:r>
               <w:rPr>
                 <w:rFonts w:ascii="Arial" w:cs="Arial" w:eastAsia="Arial" w:hAnsi="Arial"/>
-                <w:b/><w:bCs/>
+                <w:b/>
+                <w:bCs/>
                 <w:color w:val="1E293B"/>
-                <w:sz w:val="18"/><w:szCs w:val="18"/>
+                <w:sz w:val="18"/>
+                <w:szCs w:val="18"/>
               </w:rPr>
               <w:t xml:space="preserve">Mon Jun 8</w:t>
             </w:r>
@@ -6511,13 +6515,17 @@
             <w:vAlign w:val="center"/>
           </w:tcPr>
           <w:p>
-            <w:pPr><w:jc w:val="left"/></w:pPr>
+            <w:pPr>
+              <w:jc w:val="left"/>
+            </w:pPr>
             <w:r>
               <w:rPr>
                 <w:rFonts w:ascii="Arial" w:cs="Arial" w:eastAsia="Arial" w:hAnsi="Arial"/>
-                <w:b/><w:bCs/>
+                <w:b/>
+                <w:bCs/>
                 <w:color w:val="1E293B"/>
-                <w:sz w:val="18"/><w:szCs w:val="18"/>
+                <w:sz w:val="18"/>
+                <w:szCs w:val="18"/>
               </w:rPr>
               <w:t xml:space="preserve">Dashboard today-only filter</w:t>
             </w:r>
@@ -6542,15 +6550,19 @@
             <w:vAlign w:val="center"/>
           </w:tcPr>
           <w:p>
-            <w:pPr><w:jc w:val="left"/></w:pPr>
+            <w:pPr>
+              <w:jc w:val="left"/>
+            </w:pPr>
             <w:r>
               <w:rPr>
                 <w:rFonts w:ascii="Arial" w:cs="Arial" w:eastAsia="Arial" w:hAnsi="Arial"/>
-                <w:b w:val="false"/><w:bCs w:val="false"/>
+                <w:b w:val="false"/>
+                <w:bCs w:val="false"/>
                 <w:color w:val="1E293B"/>
-                <w:sz w:val="18"/><w:szCs w:val="18"/>
+                <w:sz w:val="18"/>
+                <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">DashboardPage.jsx &#x2014; filter the history prop to only entries where timestamp is today before computing stats. History page stays unchanged &#x2014; still shows all records.</w:t>
+              <w:t xml:space="preserve">DashboardPage.jsx — filter the history prop to only entries where timestamp is today before computing stats. History page stays unchanged — still shows all records.</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -6622,7 +6634,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">End-to-end auth test + bug fixes</w:t>
+              <w:t xml:space="preserve">User mgmt + Role-based UI + Auto-logout ✓ DONE</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -6657,7 +6669,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Full flow: login → scan → view history → sign out → confirm protected routes block. Fix any token expiry edge cases, 401 redirect loops, or missing header issues. Originally scheduled for Wed Jun 10.</w:t>
+              <w:t xml:space="preserve">User management CRUD (B11, F12). Role-based UI access — viewer/pharmacist/admin page restrictions (N2). Auto-logout idle timer 30-min (F7). Reference image fix for history detail. All completed Jun 9.</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -6729,7 +6741,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Auto-logout idle timer</w:t>
+              <w:t xml:space="preserve">Auto-logout idle timer — PULLED FORWARD TO JUN 9 ✓</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -6764,7 +6776,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">App.jsx — useEffect with mousemove/keydown listeners that reset a 15-minute countdown. On timeout: clear token from localStorage, redirect to /login, show a toast notification. Originally scheduled for Thu Jun 11.</w:t>
+              <w:t xml:space="preserve">Completed on Jun 9. Free buffer day.</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -6978,7 +6990,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Add medicine_codes (id, label) and medicine_code_items (id, code_id, drug_name, quantity) tables to database.py. Implement all CRUD endpoints. Originally scheduled for Mon Jun 15 — pulled forward by being one day ahead.</w:t>
+              <w:t xml:space="preserve">COMPLETE &#x2713; — medicine_codes and medicine_code_items tables added to database.py. All 7 CRUD endpoints built in server.py (GET/POST /medicine-codes, GET/PUT/DELETE /medicine-codes/{id}, POST/DELETE item endpoints). MedCodes and MedCodesItem Pydantic models added. SetupPage.jsx fixed — Save Settings only restarts cameras when on Camera tab; other tabs save to localStorage only.</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -7406,7 +7418,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Add Load Code dropdown to ExpectedMedicines section. On mount, fetch GET /medicine-codes. On selection, auto-populate the expected medicine list with the code items and quantities. User can still manually add/remove after loading. Originally scheduled for Wed Jun 17.</w:t>
+              <w:t xml:space="preserve">Arduino RGB LED Strip Integration. Write Arduino Nano V3 sketch to listen on serial for R,G,B commands and drive the LED strip via FastLED or Adafruit NeoPixel. Add backend/led.py pyserial wrapper with led_on(), led_off(), led_color(r,g,b). Hook into server.py scan flow: white on scan start, green on clean pass, red if medicines are missing. Note: LED strip requires separate 5V power supply. ScanPage Load Code dropdown (originally this slot) was pulled forward to Jun 13.</w:t>
             </w:r>
           </w:p>
         </w:tc>

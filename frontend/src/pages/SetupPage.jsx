@@ -55,14 +55,17 @@ export default function SetupPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      await saveCalibration({
-        cam_width:   camWidth,
-        cam_height:  camHeight,
-        crop0_right: crop0Right,
-        crop1_left:  crop1Left,
-        y_offset:    yOffset,
-        x_offset:    xOffset,
-      });
+      if(tab == "camear")
+      {
+        await saveCalibration({
+          cam_width:   camWidth,
+          cam_height:  camHeight,
+          crop0_right: crop0Right,
+          crop1_left:  crop1Left,
+          y_offset:    yOffset,
+          x_offset:    xOffset,
+        });
+      }
       localStorage.setItem("hospital_name", hospitalName)
       localStorage.setItem("hospital_code", hospitalCode)
       setSaved(true);
@@ -112,7 +115,7 @@ export default function SetupPage() {
                           ? "bg-green-600 text-white"
                           : "bg-blue-600 hover:bg-blue-700 text-white"}`}
           >
-            {saving ? (
+            {saving ? ( 
               <>
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>

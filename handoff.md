@@ -155,6 +155,9 @@ frontend/src/
 - History detail popup loads from DB — annotated image + all result rows
 - **JWT authentication — fully wired frontend + backend**
 - **Hospital location saved to scan history**
+- **Role-based UI — viewer/pharmacist/admin see different pages and tabs**
+- **Auto-logout after 30 min idle**
+- **Reference images stored and shown in history detail**
 - Perspective/straightening calibration on detected crops (Layer 1)
 - Camera resolution and calibration setup page
 - Camera autofocus lock on both cameras
@@ -182,11 +185,43 @@ frontend/src/
 ### Jun 9 — Bug Fixes
 
 - `LoginPage.jsx` — role was hardcoded to `"Administrator"`. Fixed to decode role from JWT payload on login so sidebar shows the correct role
+- `MasterDataPage.jsx` — role dropdown values were capitalized (`Viewer`, `Admin`, `Pharmacist`). Fixed to lowercase to match JWT payload
+- `server.py` — role values now normalized to lowercase on save (`INSERT` and `UPDATE`)
+- Existing DB roles normalized via `UPDATE users SET role = LOWER(role)`
+
+### Jun 9 — Auto-logout idle timer (fully complete)
+
+- `App.jsx` — `useEffect` with `mousemove`/`keydown` listeners resetting a 30-min `setTimeout`
+- On timeout: `localStorage.removeItem("access_token")` then `setUser(null)`
+- Frontend-only — no backend changes needed
+
+### Jun 9 — Role-based UI access (fully complete)
+
+- `Sidebar.jsx` — `allowedRoles` array on each nav item; section header hidden if all items filtered out
+  - viewer: Dashboard + History only
+  - pharmacist: all pages except hidden Users/Roles tabs
+  - admin: full access
+- `MasterDataPage.jsx` — accepts `user` prop; Users and Roles tabs filtered out for non-admin roles
+- `App.jsx` — passes `user` prop to `<MasterDataPage>`
+
+### Jun 9 — Reference image fix for history detail (fully complete)
+
+- `database.py` — `reference_image TEXT` column added to `scan_results` table
+- `server.py` — `ScanResultItem` model includes `reference_image`; INSERT and GET detail both include the field
+- `App.jsx` — `reference_image` included in results map in both `handleCloseAndReview` and `handleComplete`
+- Run once on existing DB: `ALTER TABLE scan_results ADD COLUMN reference_image TEXT;`
+
+### Jun 10 — Medicine Code Backend (fully complete)
+
+- `database.py` — `medicine_codes` (id, label) and `medicine_code_items` (id, code_id, drug_name, quantity) tables added
+- `server.py` — 7 CRUD endpoints: `GET/POST /medicine-codes`, `GET/PUT/DELETE /medicine-codes/{id}`, `POST /medicine-codes/{id}/items`, `DELETE /medicine-codes/{id}/items/{item_id}`
+- Pydantic models: `MedCodes` (label) and `MedCodesItem` (drug_name, quantity)
+- `SetupPage.jsx` — Save Settings now only calls `saveCalibration` when on the Camera tab; other tabs just save to localStorage without restarting cameras
 
 ### Known Issues / Still To Build
 
-- **Auto-logout idle timer** — not wired up yet (Jun 9 remaining / Jun 10)
-- **Medicine Code feature** — new tab + DB tables + ScanPage dropdown not built yet
+- **Medicine Code frontend** — `MedicineCodePage.jsx` + Sidebar tab not built yet (Jun 12)
+- **ScanPage Load Code dropdown** — not built yet (Jun 13)
 - **History export** — no Excel download yet
 - **Layer 4 only handles 8 medicine types** — plan to expand to 20 types
 - **Ambient light sensitivity** — software offset partially compensates but hardware lighting needs improvement
@@ -256,18 +291,6 @@ MJPEG stream is loaded via `<img src>` tag — browsers cannot attach custom hea
 
 ## 6. Next Steps (Priority Order)
 
-### TODAY — Jun 9 (remaining) — Auto-logout idle timer ✅
-
-- `App.jsx` — `useEffect` with `mousemove`/`keydown` listeners resetting a 30-min timer
-- On timeout: `localStorage.removeItem("access_token")` then `setUser(null)`
-- Frontend-only — no backend changes needed
-
-### TODAY — Jun 9 (afternoon) — Role-based UI access
-
-- Restrict what each role can see/access in the frontend based on `user.role`
-- Roles: `admin`, `pharmacist`, `viewer`
-- Decide which pages and actions each role can access (e.g. admin-only: Master Data user management; viewer: read-only)
-
 ### NEXT — Jun 11 — Image audit (ML)
 
 - Count images per class in `backend/data/medicine_images/`
@@ -275,33 +298,23 @@ MJPEG stream is loaded via `<img src>` tag — browsers cannot attach custom hea
 - Confirm 12 new medicine boxes are available
 - Document gap list: class → current count → images needed
 
-### NEXT — Jun 12 — Medicine Code backend
-
-**`backend/database.py`**
-```sql
-CREATE TABLE IF NOT EXISTS medicine_codes (
-    id    INTEGER PRIMARY KEY AUTOINCREMENT,
-    label TEXT
-);
-CREATE TABLE IF NOT EXISTS medicine_code_items (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    code_id   INTEGER NOT NULL REFERENCES medicine_codes(id) ON DELETE CASCADE,
-    drug_name TEXT    NOT NULL,
-    quantity  INTEGER DEFAULT 1
-);
-```
-- CRUD endpoints: `GET /medicine-codes`, `POST /medicine-codes`, `GET/PUT/DELETE /medicine-codes/{id}`, `POST /medicine-codes/{id}/items`, `DELETE /medicine-codes/{id}/items/{item_id}`
-
-### MEDIUM — Medicine Code frontend (Jun 15–17)
+### NEXT — Jun 12 — Medicine Code frontend (moved up from Jun 15)
 
 - `MedicineCodePage.jsx` — new page, CRUD for codes, medicine picker from drug master data
 - `Sidebar.jsx` — add Medicine Code tab between Master Data and Setup
-- `ScanPage.jsx` / `ExpectedMedicines.jsx` — Load Code dropdown, auto-populates expected list
 
-### MEDIUM — User management (Jun 9) — moved up from Jun 23
+### NEXT — Jun 13 — ScanPage Load Code dropdown (moved up from Jun 16)
 
-- `server.py` — admin-only `GET/POST/PUT/DELETE /users`, role check from JWT
-- `MasterDataPage.jsx` — replace Coming Soon with real CRUD table
+- `ScanPage.jsx` / `ExpectedMedicines.jsx` — Load Code dropdown, auto-populates expected list on selection
+- User can still manually add/remove after loading
+
+### NEXT — Jun 16 — Arduino RGB LED Strip Integration
+
+- Write Arduino sketch (Nano V3) — listens on serial for `R,G,B\n` commands, drives strip via FastLED or Adafruit NeoPixel
+- Add `backend/led.py` — `pyserial` wrapper: `led_on()`, `led_off()`, `led_color(r,g,b)`
+- Hook into `server.py` scan flow: white on scan start, green on clean pass, red if missing medicines
+- Note: LED strip needs separate 5V power supply — Nano cannot drive the strip directly
+- Find correct COM port via Device Manager → Ports
 
 ### MEDIUM — History Excel export (Jun 24)
 
