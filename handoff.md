@@ -1,6 +1,6 @@
 # MedVerify v3 — Session Handoff
 
-> Updated: 2026-06-09
+> Updated: 2026-06-12
 > Project root: C:\Users\pasul\Desktop\InternStuff\v3_webapp
 
 ---
@@ -218,10 +218,32 @@ frontend/src/
 - Pydantic models: `MedCodes` (label) and `MedCodesItem` (drug_name, quantity)
 - `SetupPage.jsx` — Save Settings now only calls `saveCalibration` when on the Camera tab; other tabs just save to localStorage without restarting cameras
 
-### Known Issues / Still To Build
+### Jun 11 — Medicine Code Frontend (fully complete)
 
-- **Medicine Code frontend** — `MedicineCodePage.jsx` + Sidebar tab not built yet (Jun 12)
-- **ScanPage Load Code dropdown** — not built yet (Jun 13)
+- `MedicineCodePage.jsx` — full CRUD page: list codes, create/edit/delete codes, expand row to see items, add/remove items via drug picker dropdown
+- `Sidebar.jsx` — Medicine Codes tab added between Master Data and Setup (admin + pharmacist only)
+- `App.jsx` — `MedicineCodePage` imported and routed at `"medicinecodes"`, `PAGE_TITLES` entry added
+- `api/index.js` — 7 medicine code API functions added: `getMedicinesCodes`, `addMedicineCode`, `updateMedicineCode`, `deleteMedicineCode`, `getMedicineCode`, `addMedicineCodeItem`, `deleteMedicineCodeItem`
+- `GET /medicine-codes` updated to include items in each code response (was flat list, now nested)
+- `database.py` — `medicine_codes` and `medicine_code_items` tables moved into `executescript` in `init_db()` so they're created on fresh DB
+
+### Jun 11 — Arduino RGB LED Strip (fully complete, ahead of schedule)
+
+- `backend/led.py` — `pyserial` wrapper: `connect()`, `led_white()`, `led_off()`, `led_green()`, `led_red()`, `led_orange()`
+- `connect()` waits 2 seconds after opening serial port for Arduino reset, then calls `led_white()`
+- `server.py` — `led_connect()` called on startup; scan endpoint sets color based on result then resets to white after 2 seconds via background thread
+- Arduino Nano V3 on COM7, sketch listens for single-char commands: `1`=white, `0`=off, `G`=green, `R`=red, `O`=orange
+- LED colors: green = all matched, red = missing medicines, orange = extra medicines
+
+### Jun 12 — ScanPage Load Code Dropdown (fully complete)
+
+- `ExpectedMedicines.jsx` — fetches `GET /medicine-codes` on mount, renders a "Load Code…" select dropdown above the Import .txt button
+- Selecting a code replaces the expected list with that code's items (drug names uppercased, quantities preserved)
+- Manual add/remove/import still works after loading a code
+- Dropdown hidden if no codes exist
+
+### Known Issues / Still To Build
+- **Image audit** — pushed, no date set yet
 - **History export** — no Excel download yet
 - **Layer 4 only handles 8 medicine types** — plan to expand to 20 types
 - **Ambient light sensitivity** — software offset partially compensates but hardware lighting needs improvement
@@ -283,6 +305,10 @@ It reads stats directly from the `history` prop passed from `App.jsx`. Do not ad
 
 `hospital_name` and `hospital_code` keys in localStorage. Set by SetupPage on save, read by App.jsx when building scan session entries.
 
+### Arduino LED strip — COM7, single-char protocol
+
+`backend/led.py` opens `COM7` at 9600 baud. Commands: `1`=white, `0`=off, `G`=green, `R`=red, `O`=orange. `connect()` must be called on server startup — it waits 2s for Arduino reset then sends white. Do not change to multi-char protocol without updating the Arduino sketch.
+
 ### /video_feed is intentionally unprotected
 
 MJPEG stream is loaded via `<img src>` tag — browsers cannot attach custom headers to image src URLs. Removing auth from this endpoint is correct and intentional.
@@ -291,30 +317,12 @@ MJPEG stream is loaded via `<img src>` tag — browsers cannot attach custom hea
 
 ## 6. Next Steps (Priority Order)
 
-### NEXT — Jun 11 — Image audit (ML)
+### MEDIUM — Image audit (ML, unscheduled)
 
 - Count images per class in `backend/data/medicine_images/`
 - Identify existing classes under 250 images
 - Confirm 12 new medicine boxes are available
 - Document gap list: class → current count → images needed
-
-### NEXT — Jun 12 — Medicine Code frontend (moved up from Jun 15)
-
-- `MedicineCodePage.jsx` — new page, CRUD for codes, medicine picker from drug master data
-- `Sidebar.jsx` — add Medicine Code tab between Master Data and Setup
-
-### NEXT — Jun 13 — ScanPage Load Code dropdown (moved up from Jun 16)
-
-- `ScanPage.jsx` / `ExpectedMedicines.jsx` — Load Code dropdown, auto-populates expected list on selection
-- User can still manually add/remove after loading
-
-### NEXT — Jun 16 — Arduino RGB LED Strip Integration
-
-- Write Arduino sketch (Nano V3) — listens on serial for `R,G,B\n` commands, drives strip via FastLED or Adafruit NeoPixel
-- Add `backend/led.py` — `pyserial` wrapper: `led_on()`, `led_off()`, `led_color(r,g,b)`
-- Hook into `server.py` scan flow: white on scan start, green on clean pass, red if missing medicines
-- Note: LED strip needs separate 5V power supply — Nano cannot drive the strip directly
-- Find correct COM port via Device Manager → Ports
 
 ### MEDIUM — History Excel export (Jun 24)
 

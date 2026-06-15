@@ -207,4 +207,121 @@ export async function deleteUser(id)
 
 
 
+//--------Medicine Codes------------------------
+
+
+export async function getMedicinesCodes()
+{
+  const res = await auth_fetch(`${BASE}/medicine-codes`)
+
+  if(!res.ok) throw new Error(`Failed to load medicine codes ${res.status}`)
+  
+  return res.json();
+}
+
+
+export async function addMedicineCode(label)
+{
+    const res = await auth_fetch(`${BASE}/medicine-codes`,{
+      method: "POST",
+      body: JSON.stringify({ label })
+    });
+
+    if(!res.ok) {
+      const err = await res.json().catch( () => ({}));
+      throw new Error(err.detail || `Failed to add medicine code ${res.status}`);
+    }
+
+    
+    return res.json()
+
+
+}
+
+
+export async function updateMedicineCode(id,label)
+{
+  const res = await auth_fetch(`${BASE}/medicine-codes/${id}`,{
+    method: "PUT",
+    body: JSON.stringify({ label })
+  });
+
+  if (!res.ok)
+  {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to update medicine code ${res.status}`);
+  }
+
+  return res.json()
+  
+}
+
+
+export async function deleteMedicineCode(id)
+{
+  const res = await auth_fetch(`${BASE}/medicine-codes/${id}`,{
+    method: "DELETE",
+  });
+
+
+  if(!res.ok)
+  {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to delete medicine code ${res.status}`);
+  }
+  
+  return res.json()
+
+}
+
+
+export async function getMedicineCode(id)
+{
+  const res = await auth_fetch(`${BASE}/medicine-codes/${id}`,{
+      method: "GET"
+  });
+  if(!res.ok)
+  {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to get medicine code ${res.status}`);
+  }
+  
+
+  return res.json()
+}
+
+
+export async function addMedicineCodeItem(id,drug_name,quantity)
+{
+  const res = await auth_fetch(`${BASE}/medicine-codes/${id}/items`,{
+      method: "POST",
+      body: JSON.stringify({drug_name,quantity})
+  })
+
+  if(!res.ok)
+  {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to add medicine code item ${res.status}`);
+  }
+  
+  return res.json()
+
+}
+
+
+export async function deleteMedicineCodeItem(codeId,itemID)
+{
+  const res = await auth_fetch(`${BASE}/medicine-codes/${codeId}/items/${itemID}`,{
+    method: "DELETE"
+  })
+
+  if(!res.ok)
+  {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to delete medicine code item ${res.status}`);
+  }
+
+  return res.json()
+}
+
 

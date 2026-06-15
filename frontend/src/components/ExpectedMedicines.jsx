@@ -1,9 +1,15 @@
 import { useState, useRef, useEffect } from "react";
+import { getMedicinesCodes } from "../api/index.js";
 
 export default function ExpectedMedicines({ expected, setExpected, scanResults, summary, onListChanged }) {
   const [name,     setName]     = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [codes,    setCodes]    = useState([]);
   const fileRef = useRef(null);
+
+  useEffect(() => {
+    getMedicinesCodes().then(setCodes).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -36,6 +42,18 @@ export default function ExpectedMedicines({ expected, setExpected, scanResults, 
 
   const removeMedicine = (n) => { setExpected(prev => prev.filter(e => e.name !== n)); onListChanged?.(); };
   const clearAll       = ()  => { setExpected([]);                                       onListChanged?.(); };
+
+  const loadFromCode = (codeId) => {
+    if (!codeId) return;
+    const code = codes.find(c => c.id === parseInt(codeId));
+    if (!code?.items?.length) return;
+    const newList = code.items.map(item => ({
+      name: item.drug_name.toUpperCase(),
+      quantity: item.quantity,
+    }));
+    setExpected(newList);
+    onListChanged?.();
+  };
 
   const loadFromFile = (e) => {
     const file = e.target.files[0];
@@ -119,7 +137,20 @@ export default function ExpectedMedicines({ expected, setExpected, scanResults, 
       </div>
 
       {/* Secondary actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        {codes.length > 0 && (
+          <select
+            defaultValue=""
+            onChange={e => { loadFromCode(e.target.value); e.target.value = ""; }}
+            className="border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600
+                       focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="" disabled>Load Code…</option>
+            {codes.map(c => (
+              <option key={c.id} value={c.id}>{c.label}</option>
+            ))}
+          </select>
+        )}
         <button
           onClick={() => fileRef.current?.click()}
           className="flex items-center gap-1.5 border border-slate-200 hover:bg-slate-50

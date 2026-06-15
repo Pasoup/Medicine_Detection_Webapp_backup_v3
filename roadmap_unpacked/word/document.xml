@@ -6848,7 +6848,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Image audit + plan 20-class expansion</w:t>
+              <w:t xml:space="preserve">Medicine Code frontend page</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -6883,7 +6883,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Count images per class in backend/data/medicine_images/. Identify which of the 8 existing classes are under 250. Confirm all 12 new medicine boxes are physically available. Document the full gap list: class name → current count → images still needed. Originally scheduled for Fri Jun 12.</w:t>
+              <w:t xml:space="preserve">Count images per class in backend/data/medicine_images/. Identify which of the 8 existing classes are under 250. Confirm all 12 new medicine boxes are physically available. Document the full gap list: class name → current count → images still needed. Swapped with Medicine Code frontend — now Jun 12.</w:t>
             </w:r>
           </w:p>
         </w:tc>
@@ -7276,7 +7276,7 @@
                 <w:sz w:val="18"/>
                 <w:szCs w:val="18"/>
               </w:rPr>
-              <w:t xml:space="preserve">Medicine Code frontend page</w:t>
+              <w:t xml:space="preserve">Image audit + plan 20-class expansion</w:t>
             </w:r>
           </w:p>
         </w:tc>

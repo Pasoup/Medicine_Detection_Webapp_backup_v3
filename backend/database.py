@@ -22,6 +22,7 @@ def init_db() -> None:
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp   TEXT    NOT NULL,
                 scanned_by  TEXT,
+                location,   TEXT,
                 matched     INTEGER DEFAULT 0,
                 missing     INTEGER DEFAULT 0,
                 extra       INTEGER DEFAULT 0,
@@ -46,9 +47,22 @@ def init_db() -> None:
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 username    TEXT    NOT NULL UNIQUE,
                 password_hash   TEXT NOT NULL,
-                role        TEXT DEFAULT 'pharmacist' 
+                role        TEXT DEFAULT 'pharmacist'
             );
-        
+
+            CREATE TABLE IF NOT EXISTS medicine_codes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                label       TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS medicine_code_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                code_id     INTEGER NOT NULL REFERENCES medicine_codes(id) ON DELETE CASCADE,
+                drug_name   TEXT    NOT NULL,
+                quantity    INTEGER DEFAULT 1
+            );
+                           
+
         """)
         hashed = pwd_context.hash("1234")
 

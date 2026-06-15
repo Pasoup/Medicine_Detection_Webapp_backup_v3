@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 import time
+import threading
 
 import cv2
 from concurrent.futures import ThreadPoolExecutor
@@ -41,10 +42,12 @@ from pipeline.layer2_qr import layer2_read_qr
 from pipeline.layer3_ocr import layer3_read_label
 from pipeline.layer4_vision import layer4_scan_full_frame, layer4_match_to_box, LAYER4_CLASS_NAMES
 from pipeline.consensus import consensus_check
+from led import led_green, led_off, led_orange, led_red, led_white, connect as led_connect
 
 
 os.makedirs(LOG_DIR, exist_ok=True)
 init_db()
+led_connect()
 
 SECRET_KEY = 'abefkjhaekjfhkajef'
 ALGORITHM = "HS256"
@@ -70,7 +73,9 @@ print(f"  Calibration path : {os.path.abspath(_CALIB_PATH)}")
 print(f"  Calibration file exists: {os.path.exists(_CALIB_PATH)}")
 print(f"  Calibration: {load_calibration()}")
 
-
+def reset_to_white(delay=5):
+    time.sleep(delay)
+    led_white()
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 app = FastAPI(title="MedVerify API", version="2.0")
@@ -285,9 +290,19 @@ def update_drug(drug_id: int, payload: DrugUpdate, current_user = Depends(get_cu
 @app.get("/medicine-codes")
 def get_medicine_codes(current_user = Depends(get_current_user)):
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM medicine_codes").fetchall()
-    
-    return [{"id" : row["id"], "label": row["label"]} for row in rows]
+        codes = conn.execute("SELECT * FROM medicine_codes").fetchall()
+        result = []
+        for code in codes:
+            items = conn.execute(
+                "SELECT id, drug_name, quantity FROM medicine_code_items WHERE code_id = ?",
+                (code["id"],)
+            ).fetchall()
+            result.append({
+                "id": code["id"],
+                "label": code["label"],
+                "items": [{"id": r["id"], "drug_name": r["drug_name"], "quantity": r["quantity"]} for r in items]
+            })
+    return result
 
 
 @app.post("/medicine-codes")
@@ -342,7 +357,10 @@ def delete_medicine_code(med_code_id: int, current_user = Depends(get_current_us
         cur = conn.execute("DELETE FROM medicine_codes WHERE id = ?", (med_code_id,))
     return {"detail" : "deleted"}
 
-# ── MedCode ITEM Endpoint ─────────────────────────────────────────────────────────
+
+# ── MedCode ITEMS Endpoint ─────────────────────────────────────────────────────────
+
+
 
 @app.post("/medicine-codes/{med_code_id}/items")
 def add_medcode_item(med_code_id : int, payload: MedCodesItem,current_user = Depends(get_current_user)):
@@ -366,6 +384,8 @@ def delete_med_code_item(med_code_id: int, item_id: int, current_user = Depends(
             raise HTTPException(status_code=404, detail="item code doesn't exist")
         conn.execute("DELETE FROM medicine_code_items WHERE id = ?", (item_id,))
     return ({"detail" : "deleted"})
+
+
 
 
 # ── Histroy Endpoint ─────────────────────────────────────────────────────────
@@ -1034,6 +1054,15 @@ def scan(req: ScanRequest, current_user = Depends(get_current_user)):
     missing = sum(1 for r in results if r["scan_status"] == "MISSING")
     extra   = sum(1 for r in results if r["scan_status"] == "EXTRA")
     review  = sum(1 for r in results if r["scan_status"] == "PENDING_REVIEW")
+
+    if missing > 0:
+        led_red()
+    elif extra > 0:
+        led_orange()
+    else:
+        led_green()
+
+    threading.Thread(target=reset_to_white,args=(5,), daemon=True).start()
 
     # Save annotated frame (stitched, with all detections drawn)
     ts       = datetime.now().strftime("%Y%m%d_%H%M%S")

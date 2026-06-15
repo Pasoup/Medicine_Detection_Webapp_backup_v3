@@ -8,8 +8,9 @@ import LoginPage      from "./pages/LoginPage";
 import ScanPage       from "./pages/ScanPage";
 import HistoryPage    from "./pages/HistoryPage";
 import DashboardPage  from "./pages/DashboardPage";
-import MasterDataPage from "./pages/MasterDataPage";
-import SetupPage      from "./pages/SetupPage";
+import MasterDataPage   from "./pages/MasterDataPage";
+import MedicineCodePage from "./pages/MedicineCodePage";
+import SetupPage        from "./pages/SetupPage";
 
 import { saveHistory, getHistory, getHistoryDetail} from "./api";
 
@@ -17,7 +18,7 @@ const PAGE_TITLES = {
   dashboard: "Dashboard",
   scan:      "Scan Medicines",
   history:   "Scan History",
-  code:      "Medicine Code",
+  medicinecodes: "Medicine Codes",
   master:    "Master Data",
   setup:     "Setup",
 };
@@ -316,8 +317,9 @@ export default function App() {
           {currentPage === "history" && (
             <HistoryPage history={history} />
           )}
-          {currentPage === "master" && <MasterDataPage user={user}/>}
-          {currentPage === "setup"  && <SetupPage />}
+          {currentPage === "master"        && <MasterDataPage user={user}/>}
+          {currentPage === "medicinecodes" && <MedicineCodePage user={user}/>}
+          {currentPage === "setup"         && <SetupPage />}
         </main>
       </div>
 
