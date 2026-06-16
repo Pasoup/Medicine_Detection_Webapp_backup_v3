@@ -1,6 +1,6 @@
 # MedVerify v3 — Session Handoff
 
-> Updated: 2026-06-12
+> Updated: 2026-06-16
 > Project root: C:\Users\pasul\Desktop\InternStuff\v3_webapp
 
 ---
@@ -234,6 +234,9 @@ frontend/src/
 - `server.py` — `led_connect()` called on startup; scan endpoint sets color based on result then resets to white after 2 seconds via background thread
 - Arduino Nano V3 on COM7, sketch listens for single-char commands: `1`=white, `0`=off, `G`=green, `R`=red, `O`=orange
 - LED colors: green = all matched, red = missing medicines, orange = extra medicines
+- On scan result: light immediately changes to result color, then blinks 3 times (on/off at 0.3s intervals), then returns to white after 1.5s
+- Blink logic is in `blink_then_white(color_fn, blinks=3, delay=1.5)` in `server.py` — runs in a daemon thread so it doesn't block the scan response
+- Camera indices fixed: `cam0_index=0, cam1_index=1` — passed explicitly in both `start()` calls in `server.py` (lines 146 and 697)
 
 ### Jun 12 — ScanPage Load Code Dropdown (fully complete)
 
@@ -242,10 +245,38 @@ frontend/src/
 - Manual add/remove/import still works after loading a code
 - Dropdown hidden if no codes exist
 
+### Jun 16 — History Excel Export (fully complete)
+
+- `GET /history/export` endpoint added to `server.py` using openpyxl + FileResponse
+- Export button added to `HistoryPage.jsx` — downloads as `scan_history_YYYY-MM-DD.xlsx`
+- `exportHistory()` function added to `api/index.js`
+
+### Jun 16 — Auto Logout Settings (fully complete)
+
+- `SetupPage.jsx` — Idle Timeout, Warning Before, and Enable Auto Logout toggle now save to localStorage on Save: `auto_logout_enabled`, `logout_secs`, `warn_secs`
+- Initial state reads from localStorage so values persist when navigating away and back
+- `App.jsx` — timer `useEffect` updated: reads localStorage values inside `resetTimer()` on every mouse/key event so new settings take effect immediately without page refresh
+- Warning banner added — appears bottom-right when session is about to expire, shows live countdown in red
+- "Stay logged in" button dismisses the warning and resets the timer
+- If `auto_logout_enabled` is `false`, timer is skipped entirely
+
+### Jun 16 — LED Unknown Color (fully complete)
+
+- Arduino sketch — added `'U'` command: `setFlatWhite(255, 60, 0)` (amber/peach for unknown)
+- `backend/led.py` — added `led_unknown()` sending `'U'`
+- `server.py` — added `unknown` count from scan results, added `led_unknown()` branch with `blink_then_white`
+- LED now handles 4 states: green (matched), red (missing), orange (extra), amber (unknown)
+
+### Jun 16 — LED Blink on Scan Result (fully complete)
+
+- `server.py` — replaced `reset_to_white()` with `blink_then_white(color_fn, blinks=3, delay=1.5)`
+- Light blinks 3 times in result color (0.3s on/off intervals) then returns to white after 1.5s
+- Arduino sketch — added `'0'` command to turn LEDs off (required for blink to work)
+- Camera indices fixed: `cam_module.start(cam0_index=0, cam1_index=1)` in both startup and restart calls
+
 ### Known Issues / Still To Build
-- **Image audit** — pushed, no date set yet
-- **History export** — no Excel download yet
-- **Layer 4 only handles 8 medicine types** — plan to expand to 20 types
+- **Image audit** — Jun 16, count images per class in `backend/data/medicine_images/`, find gaps, confirm 12 new boxes available
+- **Layer 4 only handles 8 medicine types** — plan to expand to 20 types (ML work Jun 17–23)
 - **Ambient light sensitivity** — software offset partially compensates but hardware lighting needs improvement
 
 ---
@@ -324,12 +355,7 @@ MJPEG stream is loaded via `<img src>` tag — browsers cannot attach custom hea
 - Confirm 12 new medicine boxes are available
 - Document gap list: class → current count → images needed
 
-### MEDIUM — History Excel export (Jun 24)
-
-- `GET /history/export` — openpyxl, FileResponse
-- Export button in `HistoryPage.jsx`
-
-### ML — Layer 4 expansion to 20 classes (Jun 18–22)
+### ML — Layer 4 expansion to 20 classes (Jun 17–23)
 
 - Collect 250 images × 12 new medicine types (physical photography)
 - Manual annotation for all 12 new classes (auto-annotation cannot be used — model hasn't seen them)

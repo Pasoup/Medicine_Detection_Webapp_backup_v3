@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { getHistoryDetail } from "../api";
+import { getHistoryDetail, exportHistory } from "../api";
 import HistoryDetailPopup from "../components/HistoryDetailPopup";
 
 function formatDate(iso) {
@@ -26,10 +26,11 @@ function getStatusKey(item) {
 const PAGE_SIZE = 10;
 
 export default function HistoryPage({ history }) {
-  const [search, setSearch]       = useState("");
-  const [filter, setFilter]       = useState("all");
-  const [page, setPage]           = useState(1);
-  const [detail, setDetail]       = useState(null);
+  const [search,    setSearch]    = useState("");
+  const [filter,    setFilter]    = useState("all");
+  const [page,      setPage]      = useState(1);
+  const [detail,    setDetail]    = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -62,9 +63,24 @@ export default function HistoryPage({ history }) {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-slate-800">Scan History</h1>
-        <p className="text-sm text-slate-500 mt-0.5">All verification sessions recorded this session</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-800">Scan History</h1>
+          <p className="text-sm text-slate-500 mt-0.5">All verification sessions recorded this session</p>
+        </div>
+        <button
+          onClick={() => { setExporting(true); exportHistory().finally(() => setExporting(false)); }}
+          disabled={exporting || history.length === 0}
+          className="flex items-center gap-2 border border-slate-200 hover:bg-slate-50
+                     text-slate-600 font-semibold px-4 py-2.5 rounded-xl text-sm
+                     transition-colors disabled:opacity-40"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          {exporting ? "Exporting…" : "Export Excel"}
+        </button>
       </div>
 
 

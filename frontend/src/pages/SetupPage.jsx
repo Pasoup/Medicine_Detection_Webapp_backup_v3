@@ -4,7 +4,7 @@ import { saveCalibration } from "../api/index";
 
 
 const RESOLUTION_PRESETS = {
-  "1950x1950": { label: "2048×1536", crop0_right: 0, crop1_left: 0, y_offset: 89,  x_offset: -340 },
+  "1950x1950": { label: "2048×1536", crop0_right: 0, crop1_left: 0, y_offset: 85,  x_offset: -325 },
   "1500x1500": { label: "1600×1200", crop0_right: 0, crop1_left: 0, y_offset: 74,  x_offset: -273 },
   "1280x1280": { label: "1280×960",  crop0_right: 0, crop1_left: 0, y_offset: 57,  x_offset: -219 },
   "640x480":   { label: "640×480",   crop0_right: 0, crop1_left: 0, y_offset: 29,  x_offset: -110 },
@@ -45,9 +45,9 @@ export default function SetupPage() {
   const [dbStatus, setDbStatus] = useState(null);
 
   // General settings state
-  const [autoLogout,     setAutoLogout]     = useState(true);
-  const [logoutSecs,     setLogoutSecs]     = useState(300);
-  const [warnSecs,       setWarnSecs]       = useState(30);
+  const [autoLogout,     setAutoLogout]     = useState(localStorage.getItem("auto_logout_enabled") !== "false");
+  const [logoutSecs,     setLogoutSecs]     = useState(parseInt(localStorage.getItem("logout_secs")) || 300);
+  const [warnSecs,       setWarnSecs]       = useState(parseInt(localStorage.getItem("warn_secs"))   || 30);
   const [hospitalName,   setHospitalName]   = useState(localStorage.getItem("hospital_name") || "โรงพยาบาลตัวอย่าง");
   const [hospitalCode,   setHospitalCode]   = useState(localStorage.getItem("hospital_code") || "HOPS-1");
 
@@ -68,6 +68,9 @@ export default function SetupPage() {
       }
       localStorage.setItem("hospital_name", hospitalName)
       localStorage.setItem("hospital_code", hospitalCode)
+      localStorage.setItem("auto_logout_enabled", autoLogout)
+      localStorage.setItem("logout_secs", logoutSecs)
+      localStorage.setItem("warn_secs", warnSecs)
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {

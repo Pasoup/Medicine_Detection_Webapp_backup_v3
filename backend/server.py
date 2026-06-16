@@ -42,7 +42,7 @@ from pipeline.layer2_qr import layer2_read_qr
 from pipeline.layer3_ocr import layer3_read_label
 from pipeline.layer4_vision import layer4_scan_full_frame, layer4_match_to_box, LAYER4_CLASS_NAMES
 from pipeline.consensus import consensus_check
-from led import led_green, led_off, led_orange, led_red, led_white, connect as led_connect
+from led import led_green, led_off, led_orange, led_red, led_white, led_unknown, connect as led_connect
 
 
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -73,7 +73,12 @@ print(f"  Calibration path : {os.path.abspath(_CALIB_PATH)}")
 print(f"  Calibration file exists: {os.path.exists(_CALIB_PATH)}")
 print(f"  Calibration: {load_calibration()}")
 
-def reset_to_white(delay=5):
+def blink_then_white(color_fn, blinks=3, delay=1.5):
+    for _ in range(blinks):
+        time.sleep(0.3)
+        led_off()
+        time.sleep(0.3)
+        color_fn()
     time.sleep(delay)
     led_white()
 
@@ -143,7 +148,7 @@ layer1_model = load_layer1_model()
 medicine_db  = load_medicine_db(yolo_class_names=LAYER4_CLASS_NAMES)
 
 print(f"  Medicine DB: {len(medicine_db)} entries loaded.")
-cam_module.start()
+cam_module.start(cam0_index=0, cam1_index=1)
 print("  Ready.")
 
 # ── In-memory state (replace with a real DB in production) ───────────────────
@@ -453,6 +458,86 @@ def get_history(current_user = Depends(get_current_user)):
         })
     return {"history": result, "total": len(result)}
 
+
+@app.get("/history/export")
+def export_history(current_user = Depends(get_current_user)):
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from fastapi.responses import StreamingResponse
+
+    with get_db() as conn:
+        sessions = conn.execute("SELECT * FROM scan_sessions ORDER BY id DESC").fetchall()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Scan History"
+
+    # Header styling
+    header_font  = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
+    header_fill  = PatternFill("solid", fgColor="2563EB")
+    center       = Alignment(horizontal="center", vertical="center")
+    thin         = Side(style="thin", color="D1D5DB")
+    border       = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    headers = ["#", "Timestamp", "Scanned By", "Location",
+               "Matched", "Missing", "Extra", "Unknown", "Status"]
+    col_widths = [5, 22, 18, 20, 10, 10, 10, 10, 12]
+
+    for col_idx, (h, w) in enumerate(zip(headers, col_widths), start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font      = header_font
+        cell.fill      = header_fill
+        cell.alignment = center
+        cell.border    = border
+        ws.column_dimensions[cell.column_letter].width = w
+
+    ws.row_dimensions[1].height = 20
+
+    # Status helpers
+    def status_label(s):
+        if s["missing"] and s["missing"] > 0: return "Failed"
+        if (s["extra"] and s["extra"] > 0) or (s["unknown"] and s["unknown"] > 0): return "Partial"
+        return "Passed"
+
+    status_fill = {
+        "Passed":  PatternFill("solid", fgColor="D1FAE5"),
+        "Partial": PatternFill("solid", fgColor="FEF3C7"),
+        "Failed":  PatternFill("solid", fgColor="FEE2E2"),
+    }
+
+    for row_idx, s in enumerate(sessions, start=2):
+        label = status_label(s)
+        row_data = [
+            row_idx - 1,
+            s["timestamp"],
+            s["scanned_by"] or "",
+            s["location"] or "",
+            s["matched"]  or 0,
+            s["missing"]  or 0,
+            s["extra"]    or 0,
+            s["unknown"]  or 0,
+            label,
+        ]
+        for col_idx, val in enumerate(row_data, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.border    = border
+            cell.alignment = center
+            if col_idx == 9:
+                cell.fill = status_fill.get(label, PatternFill())
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"scan_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @app.get("/history/{session_id}")
 def get_history_detail(session_id: int, current_user = Depends(get_current_user)):
     with get_db() as conn:
@@ -614,7 +699,7 @@ def update_calibration(update: CalibrationUpdate, current_user = Depends(get_cur
     # Restart cameras so the new resolution is applied
     cam_module.stop()
     time.sleep(1.0)          # let DirectShow fully release the handles
-    cam_module.start()
+    cam_module.start(cam0_index=0, cam1_index=1)
 
     return {"calibration": current, "restarted": True}
 
@@ -1054,23 +1139,27 @@ def scan(req: ScanRequest, current_user = Depends(get_current_user)):
     missing = sum(1 for r in results if r["scan_status"] == "MISSING")
     extra   = sum(1 for r in results if r["scan_status"] == "EXTRA")
     review  = sum(1 for r in results if r["scan_status"] == "PENDING_REVIEW")
+    unknown = sum(1 for r in results if r["scan_status"] == "UNKNOWN")
 
     if missing > 0:
         led_red()
+        threading.Thread(target=blink_then_white, args=(led_red,), daemon=True).start()
     elif extra > 0:
         led_orange()
+        threading.Thread(target=blink_then_white, args=(led_orange,), daemon=True).start()
+    elif unknown > 0:
+        led_unknown()
+        threading.Thread(target=blink_then_white, args=(led_unknown,), daemon=True).start()
     else:
         led_green()
+        threading.Thread(target=blink_then_white, args=(led_green,), daemon=True).start()
 
-    threading.Thread(target=reset_to_white,args=(5,), daemon=True).start()
-
-    # Save annotated frame (stitched, with all detections drawn)
+    
     ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = os.path.join(LOG_DIR, f"scan_result_{ts}.jpg")
     cv2.imwrite(out_path, annotated)
 
-    # Save Layer 4 debug image — always drawn on the stitched frame so bbox
-    # coordinates match exactly what the model saw.
+    
     l4_out_path      = None
     l4_annotated_b64 = None
     if layer4_detections is not None:

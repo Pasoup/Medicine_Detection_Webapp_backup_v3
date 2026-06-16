@@ -72,7 +72,18 @@ export async function getHistory() {
 export async function getHistoryDetail(id) {
   const res = await auth_fetch(`${BASE}/history/${id}`);
   return res.json();
-  
+}
+
+export async function exportHistory() {
+  const res = await auth_fetch(`${BASE}/history/export`);
+  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+  const blob = await res.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `scan_history_${new Date().toISOString().slice(0,10)}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 

@@ -26,6 +26,8 @@ const PAGE_TITLES = {
 export default function App() {
   // ── Auth ──────────────────────────────────────────────────────────────────
   const [user, setUser] = useState(null);
+  const [showWarning, setShowWarning] = useState(false);
+  const [countdown, setCountdown] = useState(30);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -38,27 +40,53 @@ export default function App() {
     }
   },[]);
 // --- TIMER ──────────────────────────────────────────────────────────────────
-  const idleTimerRef = useRef(null)
+  const idleTimerRef = useRef(null);
+  const warnTimerRef = useRef(null);
 
   useEffect(() => {
-   const resetTimer = () => {
+    const resetTimer = () => {
+      const enabled  = localStorage.getItem("auto_logout_enabled") !== "false";
+      const logoutMs = (parseInt(localStorage.getItem("logout_secs")) || 1800) * 1000;
+      const warnMs   = (parseInt(localStorage.getItem("warn_secs"))   || 30)   * 1000;
+
       clearTimeout(idleTimerRef.current);
+      clearTimeout(warnTimerRef.current);
+      setShowWarning(false);
+
+      if (!enabled) return;
+
+      warnTimerRef.current = setTimeout(() => {
+        setShowWarning(true);
+      }, logoutMs - warnMs);
+
       idleTimerRef.current = setTimeout(() => {
         localStorage.removeItem("access_token");
         setUser(null);
-      },30 * 60 * 1000)
-   }; 
-   window.addEventListener("mousemove", resetTimer)
-   window.addEventListener("keydown", resetTimer)
-   resetTimer()
-    return () => {
-      clearTimeout(idleTimerRef.current);
-      window.removeEventListener("mousemove", resetTimer)
-      window.removeEventListener("keydown", resetTimer)
+      }, logoutMs);
     };
 
+    window.addEventListener("mousemove", resetTimer);
+    window.addEventListener("keydown", resetTimer);
+    resetTimer();
+
+    return () => {
+      clearTimeout(idleTimerRef.current);
+      clearTimeout(warnTimerRef.current);
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("keydown", resetTimer);
+    };
   }, []);
 
+
+  useEffect(() => {
+    if (!showWarning) return;
+    const warnSecs = parseInt(localStorage.getItem("warn_secs")) || 30;
+    setCountdown(warnSecs);
+    const interval = setInterval(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [showWarning]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState("dashboard");
@@ -324,6 +352,18 @@ export default function App() {
       </div>
 
       {/* Popups — rendered outside page flow */}
+      {showWarning && (
+        <div className="fixed bottom-6 right-6 z-50 bg-white border border-red-200 shadow-xl rounded-2xl p-5 w-80">
+          <p className="text-sm font-semibold text-slate-800">Session expiring soon</p>
+          <p className="text-sm text-slate-500 mt-1">You'll be logged out in <span className="font-bold text-red-500">{countdown}s</span></p>
+          <button
+            onClick={() => setShowWarning(false)}
+            className="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-xl"
+          >
+            Stay logged in
+          </button>
+        </div>
+      )}
       {showPopup && popupData && (
         <ResultPopup
           data={popupData}
