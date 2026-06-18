@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { postScan } from "../api";
+import { postScan, toggleLight } from "../api";
 
 const BASE = "http://localhost:8000";
 
@@ -19,6 +19,13 @@ export default function CameraSection({
   setIsScanning, onScanComplete, summary,
 }) {
   const [scanError, setScanError] = useState(null);
+  const [lightOn, setLightOn] = useState(true);
+
+  const handleLightToggle = async () => {
+    const next = !lightOn;
+    setLightOn(next);
+    await toggleLight(next);
+  };
 
   const handleScan = useCallback(async () => {
     setScanError(null);
@@ -46,6 +53,13 @@ export default function CameraSection({
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-800">Camera Feed</h2>
+        <button
+          onClick={handleLightToggle}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all
+                      ${lightOn ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+        >
+          {lightOn ? "Light On" : "Light Off"}
+        </button>
       </div>
 
       {/* ── Camera viewport ── */}

@@ -1,6 +1,6 @@
 # MedVerify v3 — Session Handoff
 
-> Updated: 2026-06-16
+> Updated: 2026-06-18
 > Project root: C:\Users\pasul\Desktop\InternStuff\v3_webapp
 
 ---
@@ -274,9 +274,26 @@ frontend/src/
 - Arduino sketch — added `'0'` command to turn LEDs off (required for blink to work)
 - Camera indices fixed: `cam_module.start(cam0_index=0, cam1_index=1)` in both startup and restart calls
 
+### Jun 18 — LED Light Toggle Button (fully complete)
+
+- `CameraSection.jsx` — added "Light On/Off" toggle button in Camera Feed header
+- `api/index.js` — added `toggleLight(on)` calling `POST /led/toggle`
+- `server.py` — added `POST /led/toggle` endpoint with `LedToggle` Pydantic model; calls `led_white()` or `led_off()`
+
+### Jun 18 — Second LED Strip (fully complete)
+
+- Arduino sketch updated to support two strips: `strip1` on pin 9, `strip2` on pin 10, both `NUM_LEDS=44`
+- `setColor()` function updates both strips simultaneously — no Python/backend changes needed
+- Both strips respond identically to all serial commands
+
+### Jun 18 — Live Clock in Topbar (fully complete)
+
+- `App.jsx` — added `now` state updated every second via `setInterval`
+- Topbar clock now ticks live and shows hours, minutes, and seconds
+
 ### Known Issues / Still To Build
-- **Image audit** — Jun 16, count images per class in `backend/data/medicine_images/`, find gaps, confirm 12 new boxes available
-- **Layer 4 only handles 8 medicine types** — plan to expand to 20 types (ML work Jun 17–23)
+- **Image audit** — count images per class in `backend/data/medicine_images/`, find gaps, confirm new boxes available
+- **Layer 4 only handles 8 medicine types** — plan to expand to 20 types (ML work ongoing)
 - **Ambient light sensitivity** — software offset partially compensates but hardware lighting needs improvement
 
 ---

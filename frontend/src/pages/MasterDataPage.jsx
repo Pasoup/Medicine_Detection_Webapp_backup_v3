@@ -150,10 +150,7 @@ export default function MasterDataPage({user}) {
     }
   };
 
-
-
-
-
+  
   const handleAdd = async () => {
     if (!modalName.trim()) return;
     setModalLoading(true);

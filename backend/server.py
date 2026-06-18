@@ -290,6 +290,19 @@ def update_drug(drug_id: int, payload: DrugUpdate, current_user = Depends(get_cu
     return get_drug_database()
 
 
+# ── LED Toggle Endpoint ────────────────────────────────────────────────────────────
+class LedToggle(BaseModel):
+    on: bool
+
+@app.post("/led/toggle")
+def led_toggle(body: LedToggle, current_user = Depends(get_current_user)):
+    if body.on:
+        led_white()
+    else:
+        led_off()
+    return {"on": body.on}
+
+
 # ── MedicineCodes Endpoint ─────────────────────────────────────────────────────────
 
 @app.get("/medicine-codes")

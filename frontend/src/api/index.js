@@ -218,6 +218,14 @@ export async function deleteUser(id)
 
 
 
+
+export async function toggleLight(on) {
+  await auth_fetch(`${BASE}/led/toggle`, {
+    method : "POST",
+    body : JSON.stringify({ on })
+  });
+}
+
 //--------Medicine Codes------------------------
 
 

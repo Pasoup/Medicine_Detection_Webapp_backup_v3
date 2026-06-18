@@ -28,6 +28,12 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [showWarning, setShowWarning] = useState(false);
   const [countdown, setCountdown] = useState(30);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -39,7 +45,7 @@ export default function App() {
 
     }
   },[]);
-// --- TIMER ──────────────────────────────────────────────────────────────────
+// ── TIMER ──────────────────────────────────────────────────────────────────
   const idleTimerRef = useRef(null);
   const warnTimerRef = useRef(null);
 
@@ -320,7 +326,7 @@ export default function App() {
               System Online
             </span>
             <span className="font-mono">
-              {new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
+              {now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </span>
           </div>
         </header>

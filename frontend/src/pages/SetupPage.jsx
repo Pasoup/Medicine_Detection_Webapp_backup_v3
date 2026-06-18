@@ -95,7 +95,7 @@ export default function SetupPage() {
     if (preset) {
       setCrop0Right(preset.crop0_right);
       setCrop1Left(preset.crop1_left);
-      setYOffset(preset.y_offset);
+      setYOffset(preset.y_offset);  
       setXOffset(preset.x_offset);
     }
   };
