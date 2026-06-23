@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { postScan, toggleLight } from "../api";
+import { postScan, toggleLight, restartCamera } from "../api";
 
 const BASE = "http://localhost:8000";
 
@@ -20,6 +20,7 @@ export default function CameraSection({
 }) {
   const [scanError, setScanError] = useState(null);
   const [lightOn, setLightOn] = useState(true);
+  const [camError, setCamError] = useState(false);
 
   const handleLightToggle = async () => {
     const next = !lightOn;
@@ -73,8 +74,25 @@ export default function CameraSection({
             src={`${BASE}/video_feed`}
             alt="Live camera feed"
             className="w-full h-full object-contain"
+            onError={() => setCamError(true)}
           />
           {isScanning && <ScanningOverlay />}
+          {camError && (
+            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3 z-10">
+              <p className="text-white text-sm font-medium">Camera disconnected</p>
+              <button
+                onClick={async () => {
+                  try {
+                    await restartCamera();
+                    setCamError(false);
+                  } catch (_) {}
+                }}
+                className="bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-xl"
+              >
+                Reconnect
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

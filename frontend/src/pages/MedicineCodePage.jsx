@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   getMedicinesCodes, addMedicineCode, updateMedicineCode, deleteMedicineCode,
-  addMedicineCodeItem, deleteMedicineCodeItem, getDrugDatabase
+  addMedicineCodeItem, deleteMedicineCodeItem, updateMedicineCodeItem, getDrugDatabase
 } from "../api/index";
 
 export default function MedicineCodePage({ user }) {
@@ -10,6 +10,7 @@ export default function MedicineCodePage({ user }) {
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
   const [expandedId,   setExpandedId]   = useState(null);
+  const [editingQty,   setEditingQty]   = useState(null); // { codeId, itemId, value }
   const [modal,        setModal]        = useState(null);
   const [drugs,        setDrugs]        = useState([]);
   const [modalLabel,   setModalLabel]   = useState("");
@@ -79,6 +80,17 @@ export default function MedicineCodePage({ user }) {
       await fetchCodes();
       closeModal();
     } catch (err) { setModalError(err.message); setModalLoading(false); }
+  };
+
+  const saveQty = async () => {
+    if (!editingQty) return;
+    const qty = parseInt(editingQty.value);
+    if (!qty || qty < 1) { setEditingQty(null); return; }
+    try {
+      await updateMedicineCodeItem(editingQty.codeId, editingQty.itemId, qty);
+      await fetchCodes();
+    } catch (_) {}
+    setEditingQty(null);
   };
 
   const handleDeleteItem = async () => {
@@ -228,7 +240,25 @@ export default function MedicineCodePage({ user }) {
                               {code.items.map(item => (
                                 <tr key={item.id} className="hover:bg-white transition-colors">
                                   <td className="py-2.5 pr-4 font-medium text-slate-700">{item.drug_name}</td>
-                                  <td className="py-2.5 pr-4 text-slate-500">{item.quantity}</td>
+                                  <td className="py-2.5 pr-4 text-slate-500">
+                                    {editingQty?.itemId === item.id ? (
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        className="w-16 border border-blue-400 rounded px-1.5 py-0.5 text-xs text-slate-700 focus:outline-none"
+                                        value={editingQty.value}
+                                        onChange={e => setEditingQty(prev => ({ ...prev, value: e.target.value }))}
+                                        onBlur={saveQty}
+                                        onKeyDown={e => { if (e.key === "Enter") saveQty(); if (e.key === "Escape") setEditingQty(null); }}
+                                        autoFocus
+                                      />
+                                    ) : (
+                                      <span
+                                        className="cursor-pointer hover:text-blue-600 hover:underline"
+                                        onClick={() => setEditingQty({ codeId: code.id, itemId: item.id, value: item.quantity })}
+                                      >{item.quantity}</span>
+                                    )}
+                                  </td>
                                   <td className="py-2.5 text-right">
                                     <button
                                       onClick={() => openDelItem(code, item)}

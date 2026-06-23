@@ -42,7 +42,7 @@ from pipeline.layer2_qr import layer2_read_qr
 from pipeline.layer3_ocr import layer3_read_label
 from pipeline.layer4_vision import layer4_scan_full_frame, layer4_match_to_box, LAYER4_CLASS_NAMES
 from pipeline.consensus import consensus_check
-from led import led_green, led_off, led_orange, led_red, led_white, led_unknown, connect as led_connect
+from led import led_green, led_off, led_orange, led_red, led_white, led_unknown, connect as led_connect, is_connected as led_is_connected
 
 
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -148,7 +148,9 @@ layer1_model = load_layer1_model()
 medicine_db  = load_medicine_db(yolo_class_names=LAYER4_CLASS_NAMES)
 
 print(f"  Medicine DB: {len(medicine_db)} entries loaded.")
-cam_module.start(cam0_index=0, cam1_index=1)
+_cam_ok = cam_module.start(cam0_index=0, cam1_index=1)
+if not _cam_ok:
+    print("  [WARNING] Camera failed to start — running without camera.")
 print("  Ready.")
 
 # ── In-memory state (replace with a real DB in production) ───────────────────
@@ -219,6 +221,9 @@ class MedCodes(BaseModel):
 class MedCodesItem(BaseModel):
     drug_name: str
     quantity: int = 1
+
+class MedCodesItemUpdate(BaseModel):
+    quantity: int
 
 def _reload_medicine_db():
     global medicine_db
@@ -386,9 +391,31 @@ def add_medcode_item(med_code_id : int, payload: MedCodesItem,current_user = Dep
         exist = conn.execute("SELECT id FROM medicine_codes WHERE id = ?", (med_code_id,)).fetchone()
         if not exist:
             raise HTTPException(status_code=404, detail="Med code doesn't exist")
-        cur = conn.execute("INSERT INTO medicine_code_items(code_id, drug_name,quantity) VALUES(?,?,?)", (med_code_id,payload.drug_name,payload.quantity))
+        existing_item = conn.execute(
+            "SELECT id, quantity FROM medicine_code_items WHERE code_id = ? AND drug_name = ?",
+            (med_code_id, payload.drug_name)
+        ).fetchone()
+        if existing_item:
+            new_qty = existing_item["quantity"] + payload.quantity
+            conn.execute("UPDATE medicine_code_items SET quantity = ? WHERE id = ?", (new_qty, existing_item["id"]))
+            return {"id": existing_item["id"], "drug_name": payload.drug_name, "quantity": new_qty}
+        cur = conn.execute("INSERT INTO medicine_code_items(code_id, drug_name, quantity) VALUES(?,?,?)", (med_code_id, payload.drug_name, payload.quantity))
 
-    return {"id" : cur.lastrowid, "drug_name": payload.drug_name, "quantity": payload.quantity}
+    return {"id": cur.lastrowid, "drug_name": payload.drug_name, "quantity": payload.quantity}
+
+
+@app.put("/medicine-codes/{med_code_id}/items/{item_id}")
+def update_med_code_item(med_code_id: int, item_id: int, payload: MedCodesItemUpdate, current_user = Depends(get_current_user)):
+    if payload.quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+    with get_db() as conn:
+        exist_item = conn.execute(
+            "SELECT id FROM medicine_code_items WHERE id = ? AND code_id = ?", (item_id, med_code_id)
+        ).fetchone()
+        if not exist_item:
+            raise HTTPException(status_code=404, detail="Item not found")
+        conn.execute("UPDATE medicine_code_items SET quantity = ? WHERE id = ?", (payload.quantity, item_id))
+    return {"id": item_id, "quantity": payload.quantity}
 
 
 @app.delete("/medicine-codes/{med_code_id}/items/{item_id}")
@@ -587,6 +614,23 @@ def get_history_detail(session_id: int, current_user = Depends(get_current_user)
             for r in results
         ]
     }
+
+# ── Status Endpoint ───────────────────────────────────────────────────────────
+@app.get("/status")
+def get_status():
+    return {
+        "led": led_is_connected(),
+        "camera": cam_module.is_running(),
+    }
+
+@app.post("/camera/restart")
+def restart_camera(current_user = Depends(get_current_user)):
+    cam_module.stop()
+    ok = cam_module.start(cam0_index=0, cam1_index=1)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Camera failed to restart")
+    return {"ok": True}
+
 
 #----LoginEndpoints ───────────────────────────────────────────────────────────────────
 @app.post("/auth/login")

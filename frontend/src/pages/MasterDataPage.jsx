@@ -151,6 +151,25 @@ export default function MasterDataPage({user}) {
   };
 
   
+  const csvInputRef = useRef(null);
+
+  const handleCsvImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.trim().split("\n");
+    const dataLines = lines[0].toLowerCase().includes("name") ? lines.slice(1) : lines;
+    for (const line of dataLines) {
+      const name = line.split(",")[0].trim();
+      if (name) {
+        try { await addDrug(name); } catch (_) {}
+      }
+    }
+    const data = await getDrugDatabase();
+    setDrugs(data.drugs || []);
+    e.target.value = "";
+  };
+
   const handleAdd = async () => {
     if (!modalName.trim()) return;
     setModalLoading(true);
@@ -257,6 +276,21 @@ export default function MasterDataPage({user}) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Add Drug
+            </button>
+
+            <input
+              type="file"
+              accept=".csv"
+              ref={csvInputRef}
+              className="hidden"
+              onChange={handleCsvImport}
+            />
+            <button
+              onClick={() => csvInputRef.current.click()}
+              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700
+                         font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors"
+            >
+              Import CSV
             </button>
           </div>
 

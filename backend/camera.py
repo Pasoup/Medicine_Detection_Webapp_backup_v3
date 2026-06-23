@@ -156,7 +156,7 @@ def _stitch(f0: np.ndarray, f1: np.ndarray, calib: dict):
 
 # ── Background capture loop ───────────────────────────────────────────────────
 def _camera_loop():
-    global _latest_jpeg, _latest_raw
+    global _latest_jpeg, _latest_raw, _running
 
     # Reload calibration at most once every 2 seconds
     calib           = load_calibration()
@@ -170,6 +170,11 @@ def _camera_loop():
 
         ret0, f0 = (_cap0.read() if _cap0 else (False, None))
         ret1, f1 = (_cap1.read() if _cap1 else (False, None))
+
+        if not ret0 and not ret1:
+            print("[Camera] Both cameras lost — stopping loop")
+            _running = False
+            break
 
         if ret0 and ret1 and f0 is not None and f1 is not None:
             try:
@@ -374,6 +379,10 @@ def stop():
     if _cap0: _cap0.release()
     if _cap1: _cap1.release()
     print("[Camera] Stopped")
+
+
+def is_running() -> bool:
+    return _running
 
 
 def get_jpeg() -> bytes | None:

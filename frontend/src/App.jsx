@@ -12,7 +12,7 @@ import MasterDataPage   from "./pages/MasterDataPage";
 import MedicineCodePage from "./pages/MedicineCodePage";
 import SetupPage        from "./pages/SetupPage";
 
-import { saveHistory, getHistory, getHistoryDetail} from "./api";
+import { saveHistory, getHistory, getHistoryDetail, getStatus } from "./api";
 
 const PAGE_TITLES = {
   dashboard: "Dashboard",
@@ -29,9 +29,17 @@ export default function App() {
   const [showWarning, setShowWarning] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const [now, setNow] = useState(new Date());
+  const [hwStatus, setHwStatus] = useState({ led: true, camera: true });
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const check = () => getStatus().then(setHwStatus).catch(() => setHwStatus({ led: false, camera: false }));
+    check();
+    const interval = setInterval(check, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -183,6 +191,7 @@ export default function App() {
       unknown: restatused.filter(r => r.scan_status === "UNKNOWN").length,
     };
 
+
     const success = missingResults.length === 0
                  && mergedSummary.extra   === 0
                  && mergedSummary.review  === 0
@@ -297,6 +306,7 @@ export default function App() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+  
     <div className="min-h-screen bg-slate-50 flex">
 
       {/* Fixed sidebar */}
@@ -322,14 +332,32 @@ export default function App() {
           </h2>
           <div className="flex items-center gap-3 text-xs text-slate-500">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              System Online
+              <span className={`w-2 h-2 rounded-full animate-pulse ${hwStatus.led && hwStatus.camera ? "bg-green-500" : "bg-red-500"}`} />
+              {hwStatus.led && hwStatus.camera ? "System Online" : "System Warning"}
             </span>
             <span className="font-mono">
               {now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </span>
           </div>
         </header>
+
+        {/* Hardware warning banners */}
+        {!hwStatus.camera && (
+          <div className="bg-red-50 border-b border-red-200 px-6 py-2 text-xs text-red-700 font-medium flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            Camera offline — scanning is unavailable. Check camera connections and restart the server.
+          </div>
+        )}
+        {!hwStatus.led && (
+          <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs text-amber-700 font-medium flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            LED strip offline — COM7 not found. Scanning still works but lights will not respond.
+          </div>
+        )}
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">

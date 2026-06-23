@@ -219,6 +219,17 @@ export async function deleteUser(id)
 
 
 
+export async function getStatus() {
+  const res = await fetch(`${BASE}/status`);
+  return res.json();
+}
+
+export async function restartCamera() {
+  const res = await auth_fetch(`${BASE}/camera/restart`, { method: "POST" });
+  if (!res.ok) throw new Error("Camera restart failed");
+  return res.json();
+}
+
 export async function toggleLight(on) {
   await auth_fetch(`${BASE}/led/toggle`, {
     method : "POST",
@@ -327,6 +338,15 @@ export async function addMedicineCodeItem(id,drug_name,quantity)
 
 }
 
+
+export async function updateMedicineCodeItem(codeId, itemId, quantity) {
+  const res = await auth_fetch(`${BASE}/medicine-codes/${codeId}/items/${itemId}`, {
+    method: "PUT",
+    body: JSON.stringify({ quantity }),
+  });
+  if (!res.ok) throw new Error("Failed to update item quantity");
+  return res.json();
+}
 
 export async function deleteMedicineCodeItem(codeId,itemID)
 {

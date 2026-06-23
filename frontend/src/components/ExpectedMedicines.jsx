@@ -4,7 +4,8 @@ import { getMedicinesCodes } from "../api/index.js";
 export default function ExpectedMedicines({ expected, setExpected, scanResults, summary, onListChanged }) {
   const [name,     setName]     = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [codes,    setCodes]    = useState([]);
+  const [codes,       setCodes]       = useState([]);
+  const [selectedCode, setSelectedCode] = useState("");
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -140,8 +141,8 @@ export default function ExpectedMedicines({ expected, setExpected, scanResults, 
       <div className="flex items-center gap-2 flex-wrap">
         {codes.length > 0 && (
           <select
-            defaultValue=""
-            onChange={e => { loadFromCode(e.target.value); e.target.value = ""; }}
+            value={selectedCode}
+            onChange={e => { loadFromCode(e.target.value); setSelectedCode(""); }}
             className="border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600
                        focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >

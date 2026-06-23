@@ -2,21 +2,30 @@ import serial
 import time
 
 _ser = None
-
+_connected = False
 
 
 def connect(port="COM7", baud=9600):
-    global _ser
-    _ser = serial.Serial(port, baud, timeout=1)
-    time.sleep(2)  # wait for Arduino to finish resetting
-    led_white()
+    global _ser, _connected
+    try:
+        _ser = serial.Serial(port, baud, timeout=1)
+        time.sleep(2)
+        led_white()
+        _connected = True
+        print(f"[LED] Connected on {port}")
+    except Exception as e:
+        _ser = None
+        _connected = False
+        print(f"[LED] WARNING: Could not connect to {port} — {e}")
 
+
+def is_connected() -> bool:
+    return _connected
 
 
 def send(cmd: str):
     if _ser and _ser.is_open:
         _ser.write(cmd.encode())
-
 
 
 def led_white():    send('1')
